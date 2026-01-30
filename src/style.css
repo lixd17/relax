@@ -1,0 +1,74 @@
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0b0f14;
+  user-select: none;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#ui {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+}
+
+#ui label {
+  color: rgba(255,255,255,0.85);
+  font-family: sans-serif;
+  font-size: 14px;
+}
+
+#ui select {
+  color: rgba(255,255,255,0.92);
+  background: rgba(20,30,40,0.75);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+#nameBox {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+}
+
+#nameBox label {
+  color: rgba(255,255,255,0.85);
+  font-family: sans-serif;
+  font-size: 14px;
+}
+
+#nameBox input {
+  width: 180px;
+  color: rgba(255,255,255,0.92);
+  background: rgba(20,30,40,0.75);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  padding: 6px 10px;
+  outline: none;
+}
+
