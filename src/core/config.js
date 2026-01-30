@@ -1,19 +1,21 @@
+const withBase = (p) => new URL(p, import.meta.env.BASE_URL).toString();
+
 export const TARGETS = [
-  { key: 'sandbag.png', src: '/assets/sandbag.png', type: 'bag' },
-  { key: 'boss1.png',   src: '/assets/boss1.png',   type: 'boss' },
-  { key: 'boss2.png',   src: '/assets/boss2.png',   type: 'boss' },
+  { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
+  { key: 'boss1',   src: withBase('assets/boss1.png'),   type: 'boss' },
+  { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
 ];
 
 export const ASSET = {
-  fist: '/assets/fist.png',
-  music: '/assets/music1.mp3',
-  charge: '/assets/music2.mp3', // ✅ 新增：蓄力音效
+  fist: withBase('assets/fist.png'),
+  music: withBase('assets/music1.mp3'),
+  charge: withBase('assets/music2.mp3'),
 };
 
 // 目标整体缩放（你之前想要 75%）
 export const OBJECT_SCALE = 0.75;
 
-// 蓄力（你已经改成 3s）
+// 蓄力（3s）
 export const CHARGE_MAX_SEC = 3.0;
 export const CLICK_THRESH_SEC = 0.12;
 
