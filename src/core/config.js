@@ -1,4 +1,9 @@
-const withBase = (p) => new URL(p, import.meta.env.BASE_URL).toString();
+const BASE = import.meta.env.BASE_URL || '/';
+const withBase = (p) => {
+  const b = BASE.endsWith('/') ? BASE : BASE + '/';
+  const s = p.startsWith('/') ? p.slice(1) : p;
+  return b + s;
+};
 
 export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
