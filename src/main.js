@@ -1,3 +1,5 @@
+console.log("[RELAX BUILD]", "2026-01-30-a");
+
 import './style.css';
 
 import { createState } from './core/state.js';
