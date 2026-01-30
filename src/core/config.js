@@ -1,8 +1,9 @@
-const BASE = import.meta.env.BASE_URL || '/';
+// src/core/config.js
 const withBase = (p) => {
-  const b = BASE.endsWith('/') ? BASE : BASE + '/';
+  // 让 p 变成相对路径（去掉开头的 /）
   const s = p.startsWith('/') ? p.slice(1) : p;
-  return b + s;
+  // document.baseURI 永远是绝对 URL，例如 https://lixd17.github.io/relax/
+  return new URL(s, document.baseURI).toString();
 };
 
 export const TARGETS = [
