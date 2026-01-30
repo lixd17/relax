@@ -1,5 +1,8 @@
+import { CHARGE_MAX_SEC } from '../core/config.js';
+
 export function attachInput(canvas, getDpr, state, audio) {
   function startCharge(side) {
+    if (state.fly?.active) return;      // ✅ 飞行中不允许蓄力
     if (state.punch.active) return;
     if (state.charge.active) return;
 
@@ -8,8 +11,8 @@ export function attachInput(canvas, getDpr, state, audio) {
     state.charge.side = side;
     state.charge.t0 = performance.now();
     state.charge.sec = 0;
+    state.charge.rawSec = 0;
 
-    // ✅ 按下开始播放蓄力音
     audio?.startCharge?.();
   }
 
@@ -17,21 +20,28 @@ export function attachInput(canvas, getDpr, state, audio) {
     if (!state.charge.active) return;
     if (state.punch.active) return;
 
-    // ✅ 松开立即停止蓄力音
+    // 飞行中：直接取消
+    if (state.fly?.active) {
+      audio?.stopCharge?.();
+      state.charge.active = false;
+      return;
+    }
+
     audio?.stopCharge?.();
 
     const side = state.charge.side;
     const sec = state.charge.sec;
+    const rawSec = (state.charge.rawSec ?? sec);
 
     state.charge.active = false;
 
-    // strength 在 physics 里映射，这里先保存
     state.punch.active = true;
     state.punch.phase = 'out';
     state.punch.t = 0;
     state.punch.hitDone = false;
     state.punch.side = side;
-    state.punch.strength = sec; // 先塞秒数，physics 里会归一化
+    state.punch.strength = sec;
+    state.punch.over = rawSec > CHARGE_MAX_SEC;  // ✅ >3s
   }
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -51,7 +61,7 @@ export function attachInput(canvas, getDpr, state, audio) {
 
   canvas.addEventListener('pointercancel', (e) => {
     e.preventDefault();
-    audio?.stopCharge?.(); // ✅ cancel 也要停
+    audio?.stopCharge?.();
     state.charge.active = false;
   });
 

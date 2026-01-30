@@ -22,7 +22,7 @@ async function main() {
   const { canvas, ctx, getDpr } = setupCanvas(app);
   const imgs = await loadAllImages();
 
-  // UI：切换目标时顺便把状态收敛一下，避免切换瞬间还在狂摆
+  // UI：切换目标时顺便把状态收敛一下，避免切换瞬间还在狂摆/飞行
   createUI(state, () => {
     state.theta = 0;
     state.omega = 0;
@@ -30,6 +30,18 @@ async function main() {
     state.flash = 0;
     state.punch.active = false;
     state.charge.active = false;
+
+    // ✅ 打飞状态也要复位
+    if (state.fly) {
+      state.fly.active = false;
+      state.fly.x = 0;
+      state.fly.y = 0;
+      state.fly.vx = 0;
+      state.fly.vy = 0;
+      state.fly.ang = 0;
+      state.fly.angVel = 0;
+      state.fly.scale = 1;
+    }
   });
 
   // Input
@@ -44,7 +56,7 @@ async function main() {
     const targetImg = imgs.targets.get(state.targetKey);
     const L = computeLayout(canvas, targetImg, state);
 
-    updatePhysics(state, dt, audio);
+    updatePhysics(state, dt, audio, L);
     renderFrame(ctx, canvas, L, state, imgs, getDpr, now);
 
     requestAnimationFrame(frame);

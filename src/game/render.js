@@ -11,7 +11,7 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
 
   const fistPose = getFistPose(L, state);
   drawFistAndFX(ctx, L, state, imgs.fist, fistPose, nowMs, getDpr);
-  
+
   drawHint(ctx, L, state);
 }
 
@@ -36,18 +36,39 @@ function drawTarget(ctx, L, state, targetImg) {
   const { objW, objH, cx, cy, pivotX, pivotY, minDim } = L;
   const tgt = getTarget(state);
 
-  const s = clamp(state.squash, 0, 1);
+  const fly = state.fly;
+  const isFly = !!(fly && fly.active);
+
+  // ✅ 飞行位移后的中心
+  const cx2 = isFly ? (cx + fly.x) : cx;
+  const cy2 = isFly ? (cy + fly.y) : cy;
+
+  // 飞行时不做挤压（避免二次缩放叠加太怪）
+  const s = isFly ? 0 : clamp(state.squash, 0, 1);
   const squashK = (tgt.type === 'boss') ? 0.06 : 0.10;
   const stretchK = (tgt.type === 'boss') ? 0.08 : 0.12;
   const scaleX = 1 + squashK * s;
   const scaleY = 1 - stretchK * s;
 
   ctx.save();
-  ctx.translate(pivotX, pivotY);
-  ctx.rotate(state.theta);
-  ctx.translate(-pivotX, -pivotY);
 
-  if (tgt.type === 'bag') {
+  // ✅ 先应用旋转：正常=绕脚枢轴摆动；飞行=绕目标中心旋转
+  if (isFly) {
+    const ang = fly.ang || 0;
+    const sc = clamp((fly.scale ?? 1), 0.0001, 10);
+
+    ctx.translate(cx2, cy2);
+    ctx.rotate(ang);
+    ctx.scale(sc, sc);
+    ctx.translate(-cx2, -cy2);
+  } else {
+    ctx.translate(pivotX, pivotY);
+    ctx.rotate(state.theta);
+    ctx.translate(-pivotX, -pivotY);
+  }
+
+  // 绳子：飞行时不画（不然像拴着飞走）
+  if (!isFly && tgt.type === 'bag') {
     ctx.save();
     ctx.strokeStyle = 'rgba(220,230,255,0.25)';
     ctx.lineWidth = Math.max(2, minDim * 0.003);
@@ -58,14 +79,15 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.restore();
   }
 
-  ctx.translate(cx, cy);
+  // ✅ 挤压缩放（围绕“当前中心”）
+  ctx.translate(cx2, cy2);
   ctx.scale(scaleX, scaleY);
-  ctx.translate(-cx, -cy);
+  ctx.translate(-cx2, -cy2);
 
-  const x = cx - objW / 2;
-  const y = cy - objH / 2;
+  const x = cx2 - objW / 2;
+  const y = cy2 - objH / 2;
   ctx.drawImage(targetImg, x, y, objW, objH);
-  
+
   if (state.flash > 0.02) {
     ctx.save();
     ctx.globalAlpha = 0.18 * state.flash;
@@ -73,12 +95,11 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.fillRect(x, y, objW, objH);
     ctx.restore();
   }
-  
-  // ✅ 关键：在“目标的旋转/缩放变换”内部画名字 => 名字跟着一起旋转/摆动
-  drawNameOnTarget(ctx, L, state);
-  
+
+  // ✅ 名字放在目标变换栈内 + 使用飞行后的中心 => 跟着飞（平移/旋转/缩放）
+  drawNameOnTarget(ctx, state, cx2, cy2, objW, objH);
+
   ctx.restore();
-  
 }
 
 function getFistPose(L, state) {
@@ -203,7 +224,7 @@ function drawChargeFX(ctx, pose, nowMs) {
   ctx.arc(x, y, glowR, 0, Math.PI * 2);
   ctx.fill();
 
-  // 旋转能量环（看起来更“牛逼”）
+  // 旋转能量环
   for (let i = 0; i < ringN; i++) {
     const rr = pose.fistW * (0.55 + 0.12 * i + 0.18 * p);
     const a0 = t * (1.8 + 0.6 * i) + i * 1.7;
@@ -221,10 +242,10 @@ function drawChargeFX(ctx, pose, nowMs) {
     ctx.stroke();
   }
 
-  // 火花（用 sin/cos 做“稳定抖动”，不会随机闪烁太刺眼）
+  // 火花
   ctx.lineWidth = Math.max(1, pose.fistW * 0.02);
   for (let i = 0; i < sparkN; i++) {
-    const phi = (i * 2.399963229728653) + t * (2.0 + 4.0 * p); // 黄金角 + 旋转
+    const phi = (i * 2.399963229728653) + t * (2.0 + 4.0 * p);
     const rr = pose.fistW * (0.30 + 0.55 * p * (0.5 + 0.5 * Math.sin(t * 3 + i)));
     const len = pose.fistW * (0.08 + 0.22 * p);
 
@@ -243,11 +264,9 @@ function drawChargeFX(ctx, pose, nowMs) {
   ctx.restore();
 }
 
-function drawNameOnTarget(ctx, L, state) {
+function drawNameOnTarget(ctx, state, cx, cy, objW, objH) {
   const name = (state.namesByKey[state.targetKey] ?? '').trim();
   if (!name) return;
-
-  const { cx, cy, objW, objH } = L;
 
   // 竖排：按字符拆开
   const chars = Array.from(name);
@@ -258,21 +277,19 @@ function drawNameOnTarget(ctx, L, state) {
   const lineHFactor = 1.12;
   const fsByH = maxH / (n * lineHFactor);
   const fsByW = objW * 0.36;
-  const NAME_SCALE = 0.5; // ✅ 这里调大/调小：1.0=原样，1.2更大，0.9更小
+  const NAME_SCALE = 0.5;
   const fontSize = clamp(fsByH, 14, Math.min(64, fsByW)) * NAME_SCALE;
-  
 
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `700 ${fontSize}px sans-serif`;
 
-  // 突出颜色 + 描边，保证任何背景都看得清
+  // 突出颜色 + 描边
   const fill = 'rgba(255, 210, 80, 0.95)';
   const stroke = 'rgba(0, 0, 0, 0.75)';
 
-  // ✅ 名字中心放到“目标上部 75%”的位置
-  // 目标的顶部是 (cy - objH/2)，所以 75% 处 = 顶部 + 0.25*objH
+  // 名字中心放到目标上部（约 65% 位置）
   const nameCy = (cy - objH * 0.5) + objH * 0.35;
 
   const startY = nameCy - (n - 1) * (fontSize * lineHFactor) / 2;
