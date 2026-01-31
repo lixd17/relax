@@ -180,8 +180,8 @@ function getWeaponAngle(key, side, tInterp, charge01, rawSec, nowMs) {
     const d = deg2rad(25);
 
     // Canvas: 角度正向为顺时针；“逆时针”理解为 -d
-    const a0 = (side > 0) ? (base - d) : (base + d);
-    const a1 = (side > 0) ? (base + d) : (base - d);
+    const a0 = (side > 0) ? (base - d) : (base - d);
+    const a1 = (side > 0) ? (base + d) : (base + d);
 
     return lerp(a0, a1, clamp(tInterp, 0, 1));
   }
