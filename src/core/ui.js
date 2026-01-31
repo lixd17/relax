@@ -1,4 +1,4 @@
-import { TARGETS } from './config.js';
+import { TARGETS, WEAPONS } from './config.js';
 import { stripExt } from './utils.js';
 
 export function createUI(state, onTargetChange) {
@@ -32,31 +32,53 @@ export function createUI(state, onTargetChange) {
     nameInput.blur();
   });
 
-  // 右上角：目标选择
+  // 右上角：目标选择 + 道具选择（纵向）
   const ui = document.createElement('div');
   ui.id = 'ui';
   ui.innerHTML = `
-    <label for="targetSel">Target</label>
-    <select id="targetSel"></select>
+    <div class="row">
+      <label for="targetSel">Target</label>
+      <select id="targetSel"></select>
+    </div>
+    <div class="row">
+      <label for="weaponSel">Item</label>
+      <select id="weaponSel"></select>
+    </div>
   `;
   document.body.appendChild(ui);
 
-  const sel = ui.querySelector('#targetSel');
+  // Target select
+  const targetSel = ui.querySelector('#targetSel');
   for (const t of TARGETS) {
     const opt = document.createElement('option');
     opt.value = t.key;
-    opt.textContent = stripExt(t.key); // 不带 .png
-    sel.appendChild(opt);
+    opt.textContent = stripExt(t.key);
+    targetSel.appendChild(opt);
   }
-  sel.value = state.targetKey;
+  targetSel.value = state.targetKey;
 
-  sel.addEventListener('change', () => {
-    state.targetKey = sel.value;
+  targetSel.addEventListener('change', () => {
+    state.targetKey = targetSel.value;
     syncNameInput();
     onTargetChange?.();
   });
 
+  // Weapon select
+  const weaponSel = ui.querySelector('#weaponSel');
+  for (const w of WEAPONS) {
+    const opt = document.createElement('option');
+    opt.value = w.key;
+    opt.textContent = stripExt(w.key);
+    weaponSel.appendChild(opt);
+  }
+  weaponSel.value = state.weaponKey ?? WEAPONS[0].key;
+
+  weaponSel.addEventListener('change', () => {
+    state.weaponKey = weaponSel.value;
+    // ✅ 不强制 reset（避免切道具就中断蓄力/动作）
+  });
+
   syncNameInput();
 
-  return { nameInput, sel };
+  return { nameInput, targetSel, weaponSel };
 }
