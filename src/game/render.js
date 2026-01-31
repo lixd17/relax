@@ -166,7 +166,7 @@ function getWeaponPose(L, state, imgs, nowMs) {
 
 function getWeaponSizeFactor(key) {
   if (key === 'extinguisher') return 1.35;
-  if (key === 'stick') return 2.20;
+  if (key === 'stick') return 1.8;
   if (key === 'banana') return 1.40;
   return 1.00; // fist
 }
@@ -194,7 +194,7 @@ function getWeaponAngle(key, side, tInterp, charge01, rawSec, nowMs) {
     const k = clamp(rawSec / CHARGE_MAX_SEC, 0, 2);
 
     // 基础旋转 + 速度增益（越蓄越快）
-    const spinRate = lerp(6.0, 22.0, clamp(k, 0, 1)) + (k > 1 ? 8.0 * (k - 1) : 0);
+    const spinRate = lerp(1.0, 5.0, clamp(k, 0, 1)) + (k > 1 ? 2.0 * (k - 1) : 0);
 
     // 左右出拳反向旋转，看起来更“对应”
     const dir = (side > 0) ? 1 : -1;
