@@ -10,12 +10,26 @@ export const TARGETS = [
   { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
 ];
 
-// ✅ 道具列表（右上角新菜单用）
+// ✅ 模式（Mode 菜单用）
+export const MODES = [
+  { key: 'punch', label: 'punch' },
+  { key: 'hit',   label: 'hit' },
+];
+
+// ✅ 道具列表（punch 模式用）
 export const WEAPONS = [
   { key: 'fist',         src: withBase('assets/fist.png') },
   { key: 'extinguisher', src: withBase('assets/extinguisher.png') },
   { key: 'stick',        src: withBase('assets/stick.png') },
   { key: 'banana',       src: withBase('assets/banana.png') },
+];
+
+// ✅ 交通工具列表（hit 模式用）
+export const VEHICLES = [
+  { key: 'truck',  src: withBase('assets/truck.png') },
+  { key: 'car',    src: withBase('assets/car.png') },
+  { key: 'roller', src: withBase('assets/roller.png') },
+  { key: 'rocket', src: withBase('assets/rocket.png') },
 ];
 
 export const ASSET = {

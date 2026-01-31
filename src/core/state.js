@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES } from './config.js';
 
 export function createState() {
   return {
@@ -37,10 +37,16 @@ export function createState() {
 
     interacted: false,
 
+    // ✅ 左上角模式菜单：punch/hit
+    modeKey: 'punch',
+
     targetKey: TARGETS[0].key,
 
     // ✅ 新增：道具选择（默认 fist，如果列表里没有就取第一个）
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
+
+    // ✅ hit 模式：交通工具选择（默认 truck，如果列表里没有就取第一个）
+    vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),
 
     // ✅ 每个目标自己的名字
     namesByKey: {},

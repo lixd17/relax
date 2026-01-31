@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, ASSET } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, ASSET } from './config.js';
 import { loadImage } from './utils.js';
 
 async function loadImageSafe(src) {
@@ -32,5 +32,14 @@ export async function loadAllImages() {
     })
   );
 
-  return { fist, targets, weapons };
+  // ✅ vehicles（缺图不崩：fallback 到 fist）
+  const vehicles = new Map();
+  await Promise.all(
+    VEHICLES.map(async (v) => {
+      const img = await loadImageSafe(v.src);
+      vehicles.set(v.key, img ?? fist);
+    })
+  );
+
+  return { fist, targets, weapons, vehicles };
 }
