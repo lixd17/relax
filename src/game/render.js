@@ -6,13 +6,37 @@ import { fillRoundRect, strokeRoundRect } from '../core/utils.js';
 export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
   drawBackground(ctx, L);
 
-  const targetImg = imgs.targets.get(state.targetKey);
+  const targetImg = pickTargetImage(state, imgs);
   drawTarget(ctx, L, state, targetImg);
 
-  const pose = getWeaponPose(L, state, imgs, nowMs);
-  drawWeaponAndFX(ctx, L, state, imgs, pose, nowMs, getDpr);
+  const pose = getToolPose(L, state, imgs, nowMs);
+  drawToolAndFX(ctx, L, state, imgs, pose, nowMs, getDpr);
 
   drawHint(ctx, L, state);
+}
+
+function pickTargetImage(state, imgs) {
+  if (state.targetKey === 'custom' && state.customTarget?.img) {
+    return state.customTarget.img;
+  }
+  const img = imgs.targets.get(state.targetKey);
+  if (img) return img;
+  // fallback: 任取一个目标
+  const it = imgs.targets.values().next();
+  return it.value ?? imgs.fist;
+}
+
+function pickTool(state, imgs) {
+  const mode = state.modeKey ?? 'punch';
+  if (mode === 'hit') {
+    const key = state.vehicleKey ?? 'truck';
+    const img = imgs.vehicles?.get(key) ?? imgs.fist;
+    return { mode, key, img };
+  }
+
+  const key = state.weaponKey ?? 'fist';
+  const img = imgs.weapons?.get(key) ?? imgs.fist;
+  return { mode, key, img };
 }
 
 function drawBackground(ctx, L) {
@@ -86,7 +110,16 @@ function drawTarget(ctx, L, state, targetImg) {
 
   const x = cx2 - objW / 2;
   const y = cy2 - objH / 2;
-  ctx.drawImage(targetImg, x, y, objW, objH);
+
+  // 兼容：没图时画个占位
+  if (targetImg) {
+    ctx.drawImage(targetImg, x, y, objW, objH);
+  } else {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x, y, objW, objH);
+    ctx.restore();
+  }
 
   if (state.flash > 0.02) {
     ctx.save();
@@ -102,17 +135,12 @@ function drawTarget(ctx, L, state, targetImg) {
   ctx.restore();
 }
 
-function getWeaponPose(L, state, imgs, nowMs) {
+function getToolPose(L, state, imgs, nowMs) {
   const { objW, objH, cx, cy, startXL, startXR, startY, minDim } = L;
 
-  const mode = state.modeKey ?? 'punch';
-  const isHit = (mode === 'hit');
-
-  // punch: weapon; hit: vehicle
-  const weaponKey = isHit ? (state.vehicleKey ?? 'truck') : (state.weaponKey ?? 'fist');
-  const weaponImg = isHit
-    ? (imgs.vehicles?.get(weaponKey) ?? imgs.fist)
-    : (imgs.weapons?.get(weaponKey) ?? imgs.fist);
+  const tool = pickTool(state, imgs);
+  const key = tool.key;
+  const toolImg = tool.img;
 
   // side
   let side = +1;
@@ -126,13 +154,13 @@ function getWeaponPose(L, state, imgs, nowMs) {
   const impactX = cx + side * (objW * 0.18);
   const impactY = (tgt.type === 'boss') ? (cy - objH * 0.12) : (cy - objH * 0.05);
 
-  // punch插值参数（与位置一致，保证旋转“逐渐”）
+  // punch 插值参数（与位置一致，保证旋转“逐渐”）
   let tInterp = 0;
   if (state.punch?.active) {
     const p = state.punch;
     const tt = clamp(p.t, 0, 1);
     if (p.phase === 'out') tInterp = easeOutCubic(tt);
-    else tInterp = easeInCubic(tt); // back: p.t 从 1->0，tInterp 也从 1->0
+    else tInterp = easeInCubic(tt); // back: p.t 从 1->0
   }
 
   // position
@@ -152,49 +180,52 @@ function getWeaponPose(L, state, imgs, nowMs) {
   if (state.charge?.active) rawSec = (state.charge.rawSec ?? state.charge.sec ?? 0);
   else if (state.punch?.active) rawSec = (state.punch.strength ?? 0);
 
-  // size factor by tool
-  const sizeFactor = isHit ? getVehicleSizeFactor(weaponKey) : getWeaponSizeFactor(weaponKey);
+  // size
+  const sizeFactor = getToolSizeFactor(tool.mode, key);
   const baseW = minDim * FIST_SIZE_FACTOR * sizeFactor;
 
   // keep aspect ratio
-  const ar = (weaponImg && weaponImg.width > 0) ? (weaponImg.height / weaponImg.width) : 1;
+  const ar = (toolImg && toolImg.width > 0) ? (toolImg.height / toolImg.width) : 1;
   const w = baseW;
   const h = baseW * ar;
 
-  // rotation（hit 模式暂时不做特殊动作，默认与 fist 一样）
-  const angle = isHit ? 0 : getWeaponAngle(weaponKey, side, tInterp, charge01, rawSec, nowMs);
+  // rotation
+  const angle = getToolAngle(tool.mode, key, side, tInterp, charge01, rawSec, nowMs);
 
-  // mirror（hit 模式默认镜像；punch 模式仅 fist/extinguisher 镜像）
-  const needMirror = isHit || (weaponKey === 'fist' || weaponKey === 'extinguisher');
+  // mirror（默认都镜像，stick/banana 只用角度控制）
+  const needMirror = (key !== 'stick' && key !== 'banana');
 
-  return { weaponKey, weaponImg, side, x, y, w, h, charge01, angle, needMirror, isHit };
+  return { toolMode: tool.mode, toolKey: key, toolImg, side, x, y, w, h, charge01, angle, needMirror };
 }
 
-function getWeaponSizeFactor(key) {
+function getToolSizeFactor(mode, key) {
+  if (mode === 'hit') {
+    if (key === 'truck') return 2.35;
+    if (key === 'car') return 2.10;
+    if (key === 'roller') return 2.25;
+    if (key === 'rocket') return 2.20;
+    return 2.20;
+  }
+
+  // punch mode
   if (key === 'extinguisher') return 1.35;
   if (key === 'stick') return 1.8;
   if (key === 'banana') return 1.40;
   return 1.00; // fist
 }
 
-function getVehicleSizeFactor(key) {
-  // 先保守一点：与 fist 类似；后续再根据车种调大小/姿态
-  if (key === 'truck') return 1.35;
-  if (key === 'roller') return 1.45;
-  if (key === 'rocket') return 1.25;
-  if (key === 'car') return 1.20;
-  return 1.30;
-}
+function getToolAngle(mode, key, side, tInterp, charge01, rawSec, nowMs) {
+  if (mode === 'hit') {
+    // ✅ 交通工具：先用“跟拳套一样”的逻辑，不额外旋转
+    return 0;
+  }
 
-function getWeaponAngle(key, side, tInterp, charge01, rawSec, nowMs) {
   if (key === 'stick') {
     // ✅ 棍子：在“二四象限 45°”附近逐渐旋转
-    // 右侧出发：初始逆时针25° -> 最终顺时针25°
-    // 左侧出发：反过来
     const base = Math.PI / 4;   // 45°
     const d = deg2rad(25);
 
-    // Canvas: 角度正向为顺时针；“逆时针”理解为 -d
+    // Canvas: 角度正向为顺时针
     const a0 = (side > 0) ? (base + d) : (base - d);
     const a1 = (side > 0) ? (base - d) : (base + d);
 
@@ -211,7 +242,7 @@ function getWeaponAngle(key, side, tInterp, charge01, rawSec, nowMs) {
     // 基础旋转 + 速度增益（越蓄越快）
     const spinRate = lerp(1.0, 5.0, clamp(k, 0, 1));
 
-    // 左右出拳反向旋转，看起来更“对应”
+    // 左右出拳反向旋转
     const dir = (side > 0) ? 1 : -1;
 
     return dir * now * spinRate;
@@ -221,13 +252,13 @@ function getWeaponAngle(key, side, tInterp, charge01, rawSec, nowMs) {
   return 0;
 }
 
-function drawWeaponAndFX(ctx, L, state, imgs, pose, nowMs, getDpr) {
+function drawToolAndFX(ctx, L, state, imgs, pose, nowMs, getDpr) {
   if (!state.charge?.active && !state.punch?.active) return;
 
   // 蓄力特效（越久越强）
   drawChargeFX(ctx, pose, nowMs);
 
-  // 画道具
+  // 画道具 / 交通工具
   ctx.save();
 
   if (state.flash > 0.12) {
@@ -237,13 +268,13 @@ function drawWeaponAndFX(ctx, L, state, imgs, pose, nowMs, getDpr) {
 
   ctx.translate(pose.x, pose.y);
 
-  // 镜像（hit 模式默认镜像；punch 模式仅 fist/extinguisher）
+  // 镜像
   if (pose.needMirror && pose.side < 0) ctx.scale(-1, 1);
 
-  // 旋转（仅 punch 模式的 stick/banana）
+  // 旋转
   if (pose.angle) ctx.rotate(pose.angle);
 
-  ctx.drawImage(pose.weaponImg, -pose.w / 2, -pose.h / 2, pose.w, pose.h);
+  ctx.drawImage(pose.toolImg, -pose.w / 2, -pose.h / 2, pose.w, pose.h);
 
   ctx.restore();
 
@@ -389,6 +420,6 @@ function drawHint(ctx, L, state) {
   ctx.font = `${Math.floor(L.minDim * 0.03)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('按住蓄力，松开出拳；左上角可命名；左上角菜单切换 Mode/Target/Item(或Vehicle)', L.W * 0.5, L.H * 0.18);
+  ctx.fillText('按住蓄力，松开出拳；左上角可命名/上传对象；选择 mode/target/道具或交通工具', L.W * 0.5, L.H * 0.18);
   ctx.restore();
 }

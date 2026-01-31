@@ -13,39 +13,92 @@ canvas {
   display: block;
 }
 
-#ui {
+/* ===== HUD / Panels ===== */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+#hudLeft {
   position: fixed;
-  /* 放在左上角（nameBox 下方），并包含 Mode/Target/Tool 三行菜单 */
-  top: 64px;
-  left: 12px;
-  z-index: 10;
+  top: calc(12px + var(--safe-top));
+  left: calc(12px + var(--safe-left));
+  z-index: 20;
 
   display: flex;
-  flex-direction: column;   /* ✅ 纵向排列 */
-  gap: 8px;
-  align-items: stretch;
+  flex-direction: column;
+  gap: 10px;
 
+  max-width: min(92vw, 380px);
+}
+
+.panel {
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(0,0,0,0.35);
   backdrop-filter: blur(6px);
 }
 
-#ui .row {
+.panelTitle {
+  color: rgba(255,255,255,0.92);
+  font-family: sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.hint {
+  color: rgba(255,255,255,0.70);
+  font-family: sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 10px;
+}
+
+.hint strong {
+  color: rgba(255,255,255,0.92);
+}
+
+.mobileNote {
+  color: rgba(255,255,255,0.65);
+}
+
+.panel .row {
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }
 
-#ui label {
+.panel .row:first-of-type {
+  margin-top: 0;
+}
+
+.panel .rowTight {
+  align-items: center;
+}
+
+.panel label {
   color: rgba(255,255,255,0.85);
   font-family: sans-serif;
   font-size: 14px;
   min-width: 52px;
 }
 
-#ui select {
+.panel label.inline {
+  min-width: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel input[type="text"],
+.panel input:not([type]),
+.panel select {
+  flex: 1;
   min-width: 150px;
   color: rgba(255,255,255,0.92);
   background: rgba(20,30,40,0.75);
@@ -55,32 +108,51 @@ canvas {
   outline: none;
 }
 
-#nameBox {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(0,0,0,0.35);
-  backdrop-filter: blur(6px);
-}
-
-#nameBox label {
+.panel input[type="file"] {
+  flex: 1;
+  min-width: 180px;
   color: rgba(255,255,255,0.85);
   font-family: sans-serif;
-  font-size: 14px;
+  font-size: 12px;
 }
 
-#nameBox input {
-  width: 180px;
+.panel button {
   color: rgba(255,255,255,0.92);
-  background: rgba(20,30,40,0.75);
+  background: rgba(60,90,120,0.55);
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 8px;
   padding: 6px 10px;
-  outline: none;
+  cursor: pointer;
+}
+
+.panel button:active {
+  transform: translateY(1px);
+}
+
+.panel .mini {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+#customPreview {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+@media (max-width: 420px) {
+  #hudLeft {
+    max-width: 94vw;
+  }
+  .panel input[type="text"],
+  .panel input:not([type]),
+  .panel select {
+    min-width: 130px;
+  }
+  .panel button {
+    padding: 6px 8px;
+  }
 }

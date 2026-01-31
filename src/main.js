@@ -1,4 +1,4 @@
-console.log("[RELAX BUILD]", "2026-01-30-a");
+console.log('[RELAX BUILD]', '2026-01-31-a');
 
 import './style.css';
 
@@ -7,6 +7,7 @@ import { setupCanvas } from './core/canvas.js';
 import { createUI } from './core/ui.js';
 import { loadAllImages } from './core/assets.js';
 import { createHitAudio } from './core/audio.js';
+import { TARGETS } from './core/config.js';
 
 import { computeLayout } from './game/layout.js';
 import { attachInput } from './game/input.js';
@@ -14,6 +15,13 @@ import { updatePhysics } from './game/physics.js';
 import { renderFrame } from './game/render.js';
 
 const app = document.querySelector('#app');
+
+function pickTargetImage(state, imgs) {
+  if (state.targetKey === 'custom' && state.customTarget?.img) {
+    return state.customTarget.img;
+  }
+  return imgs.targets.get(state.targetKey) || imgs.targets.get(TARGETS[0].key) || imgs.fist;
+}
 
 async function main() {
   const state = createState();
@@ -53,7 +61,7 @@ async function main() {
     const dt = (now - lastT) / 1000;
     lastT = now;
 
-    const targetImg = imgs.targets.get(state.targetKey);
+    const targetImg = pickTargetImage(state, imgs);
     const L = computeLayout(canvas, targetImg, state);
 
     updatePhysics(state, dt, audio, L);

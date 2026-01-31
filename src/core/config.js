@@ -4,13 +4,17 @@ const withBase = (p) => {
   return new URL(s, document.baseURI).toString();
 };
 
+export const CUSTOM_TARGET_KEY = 'custom';
+
 export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
   { key: 'boss1',   src: withBase('assets/boss1.png'),   type: 'boss' },
   { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
+  // ✅ 用户自定义目标（图片由 UI 上传；这里不提供 src）
+  { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
 ];
 
-// ✅ 模式（Mode 菜单用）
+// ✅ Mode（punch=现有逻辑；hit=vehicle 菜单）
 export const MODES = [
   { key: 'punch', label: 'punch' },
   { key: 'hit',   label: 'hit' },
@@ -25,6 +29,8 @@ export const WEAPONS = [
 ];
 
 // ✅ 交通工具列表（hit 模式用）
+// 注意：你需要在 public/assets/ 下放置这些图片：
+// truck.png, car.png, roller.png, rocket.png
 export const VEHICLES = [
   { key: 'truck',  src: withBase('assets/truck.png') },
   { key: 'car',    src: withBase('assets/car.png') },

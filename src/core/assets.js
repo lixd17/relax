@@ -18,8 +18,10 @@ export async function loadAllImages() {
   const targets = new Map();
   await Promise.all(
     TARGETS.map(async (t) => {
-      const img = await loadImage(t.src);
-      targets.set(t.key, img);
+      // ✅ custom target 没有 src（由 UI 上传），跳过
+      if (!t.src) return;
+      const img = await loadImageSafe(t.src);
+      if (img) targets.set(t.key, img);
     })
   );
 

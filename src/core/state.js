@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, VEHICLES } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, CUSTOM_TARGET_KEY } from './config.js';
 
 export function createState() {
   return {
@@ -37,18 +37,27 @@ export function createState() {
 
     interacted: false,
 
-    // ✅ 左上角模式菜单：punch/hit
+    // ✅ 左上角 Mode
     modeKey: 'punch',
 
+    // ✅ 当前目标
     targetKey: TARGETS[0].key,
 
-    // ✅ 新增：道具选择（默认 fist，如果列表里没有就取第一个）
+    // ✅ 用户上传的自定义目标（draw/layout 会优先用这里的 img）
+    customTarget: {
+      img: null,      // HTMLImageElement | HTMLCanvasElement | null
+      meta: null,     // { w,h, cropped:boolean, from:string } | null
+    },
+
+    // ✅ punch 模式：道具选择（默认 fist）
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
 
-    // ✅ hit 模式：交通工具选择（默认 truck，如果列表里没有就取第一个）
+    // ✅ hit 模式：交通工具选择（默认 truck）
     vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),
 
-    // ✅ 每个目标自己的名字
-    namesByKey: {},
+    // ✅ 每个目标自己的名字（包含 custom）
+    namesByKey: {
+      [CUSTOM_TARGET_KEY]: '',
+    },
   };
 }
