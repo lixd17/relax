@@ -1,4 +1,4 @@
-console.log('[RELAX BUILD]', '2026-01-31-b');
+console.log('[RELAX BUILD]', '2026-01-31-c');
 
 import './style.css';
 
@@ -19,7 +19,6 @@ function pickTargetImage(state, imgs) {
   if (state.targetKey === 'custom' && state.customTarget?.img) {
     return state.customTarget.img;
   }
-  // fallback to first available
   return imgs.targets.get(state.targetKey) || imgs.targets.values().next().value || imgs.fist;
 }
 
@@ -35,9 +34,19 @@ async function main() {
     state.omega = 0;
     state.squash = 0;
     state.flash = 0;
+
+    // 复位 punch/charge
     state.punch.active = false;
     state.charge.active = false;
 
+    // 复位 hit
+    state.vehicleAct.active = false;
+    state.throwFx.active = false;
+    state.flattenFx.active = false;
+    state.rocketFx.active = false;
+    state.explosion.active = false;
+
+    // 复位 fly
     if (state.fly) {
       state.fly.active = false;
       state.fly.x = 0;

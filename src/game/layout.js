@@ -3,7 +3,6 @@ import { OBJECT_SCALE, FOOT_PIVOT_FRAC, TARGETS, CUSTOM_TARGET_KEY } from '../co
 
 export function getTarget(state) {
   if (state.targetKey === CUSTOM_TARGET_KEY) {
-    // ✅ 自定义目标默认按 boss 处理（脚部枢轴 + 无绳子）
     return { key: CUSTOM_TARGET_KEY, type: 'boss' };
   }
   return TARGETS.find(t => t.key === state.targetKey) || TARGETS[0];
@@ -14,11 +13,9 @@ export function computeLayout(canvas, targetImg, state) {
   const H = canvas.height;
   const minDim = Math.min(W, H);
 
-  // 目标基础高度
   const baseH = minDim * 0.52;
   const objH = baseH * OBJECT_SCALE;
 
-  // 目标宽高比（兼容 HTMLImageElement / HTMLCanvasElement / null）
   const tw = targetImg?.width || targetImg?.naturalWidth || 512;
   const th = targetImg?.height || targetImg?.naturalHeight || 512;
 
