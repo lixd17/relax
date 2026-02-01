@@ -21,6 +21,13 @@ function isLetterKey(k) {
   return ((k >= 'a' && k <= 'z') || (k >= 'A' && k <= 'Z'));
 }
 
+function getSideFromEvent(canvas, e) {
+  // Use CSS pixels + DOM rect so it stays correct even if canvas isn't at x=0
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  return (x < rect.width * 0.5) ? -1 : +1;
+}
+
 export function attachInput(canvas, getDpr, state, audio) {
   // 让 canvas 可获得焦点，尽量把键盘输入留在游戏里
   try { canvas.tabIndex = 0; } catch (_) {}
@@ -56,7 +63,8 @@ export function attachInput(canvas, getDpr, state, audio) {
 
     audio?.stopCharge?.();
 
-    const side = state.charge.side;
+    // normalize side to -1/+1
+    const side = (state.charge.side === +1) ? +1 : -1;
     const sec = clamp(state.charge.sec ?? 0, 0, CHARGE_MAX_SEC);
     const rawSec = (state.charge.rawSec ?? sec);
 
@@ -69,6 +77,7 @@ export function attachInput(canvas, getDpr, state, audio) {
       state.vehicleAct.active = true;
       state.vehicleAct.pendingInit = true;
       state.vehicleAct.key = state.vehicleKey ?? 'truck';
+      state.vehicleAct.side = side; // ✅ ensure left/right symmetric spawn
       state.vehicleAct.chargeSec = sec;
       state.vehicleAct.strength01 = clamp(sec / CHARGE_MAX_SEC, 0, 1);
       state.vehicleAct.hitDone = false;
@@ -155,9 +164,7 @@ export function attachInput(canvas, getDpr, state, audio) {
     // 尽量把焦点拉回 canvas，避免键盘敲字落到输入框
     try { canvas.focus(); } catch (_) {}
 
-    const dpr = getDpr();
-    const xCanvas = e.clientX * dpr;
-    const side = (xCanvas < canvas.width * 0.5) ? -1 : +1;
+    const side = getSideFromEvent(canvas, e);
 
     if ((state.modeKey ?? 'punch') === 'rage') {
       spawnRagePunch(side);
