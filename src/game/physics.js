@@ -155,17 +155,22 @@ function stepVehicleAct(state, dt, audio, L) {
     if (hitNow) {
       act.hitDone = true;
 
-      // impulse on target
-      onImpactImpulse(state, act.side, act.strength01, L, /*allowFly*/ false);
-
       // FX based on vehicle type + charge
+      // - roller: only flatten (no swing kick). After it recovers, it should be back to rest.
+      // - truck/car: swing kick + throw/fly
       if (act.key === 'roller') {
+        state.theta = 0;
+        state.omega = 0;
         startFlattenFx(state);
       } else {
+        // impulse on target (swing + bump)
+        onImpactImpulse(state, act.side, act.strength01, L, /*allowFly*/ false);
+
         if ((act.chargeSec ?? 0) >= VEHICLE_FLY_SEC) {
           startFly(state, act.side, act.strength01, L);
         } else {
-          startThrowFx(state, act.side, act.strength01, L);
+          // make horizontal knockback depend strongly on charge time in [0..VEHICLE_FLY_SEC]
+          startThrowFx(state, act.side, act.chargeSec ?? 0, L);
         }
       }
 
@@ -215,7 +220,7 @@ function initVehicleAct(act, state, L) {
 // =========================================================
 // ThrowFx (truck / car short charge)
 // =========================================================
-function startThrowFx(state, side, strength01, L) {
+function startThrowFx(state, side, chargeSec, L) {
   const fx = state.throwFx;
   fx.active = true;
   fx.grounded = false;
@@ -227,14 +232,17 @@ function startThrowFx(state, side, strength01, L) {
   fx.x = 0;
   fx.y = 0;
 
-  // flight duration based on strength (shorter = nearer)
-  const p = clamp(strength01, 0, 1);
-  fx.T = lerp(0.55, 0.85, p);
+  // Map charge time within the "throw" regime (0..VEHICLE_FLY_SEC) to [0..1].
+  // This gives an obvious horizontal-distance change with charge time.
+  const pCharge = clamp((chargeSec ?? 0) / VEHICLE_FLY_SEC, 0, 1);
+  const p = Math.pow(pCharge, 1.9);
+  fx.T = lerp(0.48, 0.92, p);
 
   // horizontal travel and arc height
   const dir = -side;
-  const dx = dir * L.objW * lerp(0.35, 0.85, Math.pow(p, 2.2));
-  const dy = L.objH * lerp(0.15, 0.35, p);
+  // Wider horizontal range so short vs long charge is clearly different.
+  const dx = dir * L.objW * lerp(0.08, 1.25, p);
+  const dy = L.objH * lerp(0.12, 0.42, p);
 
   fx.dxLand = dx;
   fx.dyLand = dy;
@@ -304,6 +312,10 @@ function startFlattenFx(state) {
   fx.rot01 = 0;
   fx.squash01 = 0;
 
+  // roller flatten should not leave any swing after it recovers
+  state.theta = 0;
+  state.omega = 0;
+
   // immediate visual feedback
   state.flash = Math.max(state.flash, 0.75);
   state.squash = Math.max(state.squash, 0.55);
@@ -357,6 +369,10 @@ function stepFlattenFx(state, dt) {
       fx.t = 0;
       fx.rot01 = 0;
       fx.squash01 = 0;
+
+      // fully back to rest (no residual swing)
+      state.theta = 0;
+      state.omega = 0;
     }
   }
 }
