@@ -1,32 +1,21 @@
 import {
-  CHARGE_MAX_SEC,
+  CHARGE_MAX_SEC, CLICK_THRESH_SEC,
+  SWING_MIN_DEG, SWING_MAX_DEG,
   THETA_MAX_RAD,
   VEHICLE_FLY_SEC,
   VEHICLE_SIZE_SCALE,
   VEHICLE_SPEED_MIN, VEHICLE_SPEED_MAX,
+  VEHICLE_LAND_MARGIN_FRAC,
   VEHICLE_THROW_GRAV,
 } from '../core/config.js';
 
-import { clamp, lerp } from '../core/utils.js';
+import { clamp, deg2rad, lerp } from '../core/utils.js';
+import { getTarget } from './layout.js';
 
-/**
- * Physics responsibilities:
- * - update charge timers (sec / rawSec)
- * - damped swing oscillator (theta, omega) when no overriding FX
- * - punch timeline (out/back + hit impulse)
- * - hit-mode vehicleAct (spawn, move, hit decision, leave-screen cleanup)
- * - throwFx (parabola + landing)
- * - flattenFx (down -> squash -> hold -> up)
- * - fly (spin + shrink)
- *
- * NOTE: rocket mode has been removed.
- */
 export function updatePhysics(state, dt, audio, L) {
   dt = clamp(dt, 0, 0.033);
 
-  // -------------------------
-  // charge time (sec/rawSec)
-  // -------------------------
+  // charge time
   if (state.charge?.active) {
     const now = performance.now();
     const rawSec = (now - state.charge.t0) / 1000;
@@ -34,22 +23,10 @@ export function updatePhysics(state, dt, audio, L) {
     state.charge.sec = clamp(rawSec, 0, CHARGE_MAX_SEC);
   }
 
-  // -------------------------
-  // punch mode timeline
-  // -------------------------
-  const mode = state.modeKey ?? 'punch';
-  if (mode === 'punch') stepPunch(state, dt, audio, L);
+  // hit mode vehicle
+  if (state.vehicleAct?.active && L) stepVehicleAct(state, dt, audio, L);
 
-  // -------------------------
-  // hit mode vehicle logic
-  // -------------------------
-  if (mode === 'hit' && state.vehicleAct?.active && L) {
-    stepVehicleAct(state, dt, audio, L);
-  }
-
-  // -------------------------
-  // FX priority
-  // -------------------------
+  // fx priority
   if (state.fly?.active && L) {
     stepFly(state, dt, L);
   } else if (state.throwFx?.active && L) {
@@ -57,203 +34,239 @@ export function updatePhysics(state, dt, audio, L) {
   } else if (state.flattenFx?.active) {
     stepFlattenFx(state, dt);
   } else {
-    // free swing oscillator
-    const w0 = 6.0;    // natural freq
-    const zeta = 0.25; // damping ratio
+    // swing oscillator
+    const w0 = 6.0;
+    const zeta = 0.25;
     const domega = (-2 * zeta * w0 * state.omega - (w0 * w0) * state.theta);
     state.omega += domega * dt;
     state.theta += state.omega * dt;
     state.theta = clamp(state.theta, -THETA_MAX_RAD, THETA_MAX_RAD);
   }
 
-  // decay transient visual scalars
+  // decay
   state.squash *= Math.exp(-10.0 * dt);
   state.flash *= Math.exp(-12.0 * dt);
-}
 
-// =========================================================
-// Punch
-// =========================================================
-function stepPunch(state, dt, audio, L) {
+  // punch animation (punch mode only)
   const p = state.punch;
-  if (!p?.active) return;
-  if (!L) return;
+  if (p && p.active && (state.modeKey ?? 'punch') === 'punch') {
+    const outDur = 0.12;
+    const backDur = 0.10;
 
-  const outDur = 0.12;
-  const backDur = 0.10;
-
-  if (p.phase === 'out') {
-    p.t += dt / outDur;
-    if (p.t >= 1) {
-      // reach impact
-      p.t = 0;
-      p.phase = 'back';
-
-      if (!p.hitDone) {
+    if (p.phase === 'out') {
+      p.t += dt / outDur;
+      if (!p.hitDone && p.t >= 1.0) {
         p.hitDone = true;
-        onImpactImpulse(
-          state,
-          p.side,
-          clamp(p.strength / CHARGE_MAX_SEC, 0, 1),
-          L,
-          /*allowFly*/ true,
-        );
+
+        let strength01 = clamp(p.strength / CHARGE_MAX_SEC, 0, 1);
+        if (p.strength < CLICK_THRESH_SEC) strength01 = 0;
+
+        applyPunchHit(state, p.side, strength01, !!p.over, audio, L);
+
+        p.phase = 'back';
+        p.t = 1.0;
+      }
+    } else if (p.phase === 'back') {
+      p.t -= dt / backDur;
+      if (p.t <= 0) {
+        p.t = 0;
+        p.phase = 'idle';
+        p.active = false;
       }
     }
+  }
+}
+
+// punch hit (unchanged)
+function applyPunchHit(state, side, strength01, isOverCharge, audio, L) {
+  audio?.playOnce?.();
+
+  if (isOverCharge && L) {
+    startFly(state, side, strength01, L);
+    state.squash = 1.0;
+    state.flash = 1.0;
     return;
   }
 
-  if (p.phase === 'back') {
-    p.t += dt / backDur;
-    if (p.t >= 1) {
-      p.active = false;
-      p.phase = 'idle';
-      p.t = 0;
-      p.hitDone = false;
-    }
-  }
+  if (state.fly?.active) return;
+
+  const tgt = getTarget(state);
+  const typeDir = (tgt.type === 'boss') ? -1 : +1;
+
+  const swingDeg = SWING_MIN_DEG + (SWING_MAX_DEG - SWING_MIN_DEG) * strength01;
+  const peak = deg2rad(swingDeg);
+
+  const w0 = 6.0;
+  const omegaImpulse = peak * w0;
+
+  state.omega += omegaImpulse * side * typeDir;
+  state.squash = 1.0;
+  state.flash = 1.0;
 }
 
-function onImpactImpulse(state, side, strength01, L, allowFly) {
-  // visual bump
-  state.squash = Math.max(state.squash, lerp(0.18, 0.55, strength01));
-  state.flash = Math.max(state.flash, lerp(0.25, 1.0, strength01));
-
-  // swing impulse: side=-1 (from left) => rotate to right (positive)
-  const dir = -side;
-  state.omega += dir * lerp(8.0, 16.0, strength01);
-  state.theta = clamp(state.theta, -THETA_MAX_RAD, THETA_MAX_RAD);
-
-  // fly if over-charged and allowed
-  if (allowFly && state.punch?.over) {
-    startFly(state, side, strength01, L);
-  }
-}
-
-// =========================================================
-// VehicleAct (hit mode)
-// =========================================================
+// ---------------------------
+// Vehicle Act (hit mode)
+// ---------------------------
 function stepVehicleAct(state, dt, audio, L) {
   const act = state.vehicleAct;
   if (!act.active) return;
 
-  // lazy init (needs layout)
   if (act.pendingInit) {
-    initVehicleAct(act, state, L);
+    initVehicleAct(act, L);
     act.pendingInit = false;
   }
 
-  // move
   act.x += act.vx * dt;
 
-  // detect hit near target (once)
   if (!act.hitDone) {
     const impactX = L.cx + act.side * (L.objW * 0.18);
-    const bumperX = (act.vx > 0) ? (act.x + act.w * 0.5) : (act.x - act.w * 0.5);
-    const hitNow = (act.vx > 0) ? (bumperX >= impactX) : (bumperX <= impactX);
 
-    if (hitNow) {
+    const bumperX = (act.vx >= 0) ? (act.x + act.w * 0.5) : (act.x - act.w * 0.5);
+    const hit = (act.vx >= 0) ? (bumperX >= impactX) : (bumperX <= impactX);
+
+    if (hit) {
       act.hitDone = true;
+      audio?.playOnce?.();
 
-      // FX based on vehicle type + charge
-      // - roller: only flatten (no swing kick). After it recovers, it should be back to rest.
-      // - truck/car: swing kick + throw/fly
-      if (act.key === 'roller') {
-        state.theta = 0;
-        state.omega = 0;
-        startFlattenFx(state);
-      } else {
-        // impulse on target (swing + bump)
-        onImpactImpulse(state, act.side, act.strength01, L, /*allowFly*/ false);
-
-        if ((act.chargeSec ?? 0) >= VEHICLE_FLY_SEC) {
+      if (act.key === 'truck' || act.key === 'car') {
+        if (act.chargeSec >= VEHICLE_FLY_SEC) {
           startFly(state, act.side, act.strength01, L);
+          state.squash = 1.0;
+          state.flash = 1.0;
         } else {
-          // make horizontal knockback depend strongly on charge time in [0..VEHICLE_FLY_SEC]
-          startThrowFx(state, act.side, act.chargeSec ?? 0, L);
+          startThrowFx(state, act.side, act.chargeSec, act.strength01, L);
+          state.squash = 1.0;
+          state.flash = 1.0;
         }
       }
 
-      audio?.playHit?.();
+      if (act.key === 'roller') {
+        startFlattenFx(state);
+        state.squash = 1.0;
+        state.flash = 1.0;
+      }
     }
   }
 
-  // keep going until out of screen, then cleanup
-  const margin = L.minDim * 0.25;
-  const out = (act.x < -margin) || (act.x > L.W + margin);
+  // car/truck: after grounded, "roll over" once
+  if (state.throwFx?.active && state.throwFx.grounded && !state.throwFx.crushed) {
+    const tx = L.cx + state.throwFx.x;
+    const passed = (act.vx >= 0) ? ((act.x + act.w * 0.10) >= tx) : ((act.x - act.w * 0.10) <= tx);
+    if (passed) {
+      state.throwFx.crushed = true;
+      state.squash = 1.0;
+      state.flash = 1.0;
+    }
+  }
+
+  // out of screen
+  const out = (act.vx >= 0)
+    ? ((act.x - act.w * 0.5) > (L.W + act.w * 0.60))
+    : ((act.x + act.w * 0.5) < (-act.w * 0.60));
 
   if (out) {
     act.active = false;
-    act.pendingInit = false;
 
-    // if roller still holding squash, start lifting up
-    if (state.flattenFx?.active && state.flattenFx.phase === 'hold') {
+    if (state.throwFx?.active) {
+      state.throwFx.active = false;
+      state.throwFx.grounded = false;
+      state.throwFx.t = 0;
+      state.throwFx.x = 0;
+      state.throwFx.y = 0;
+      state.throwFx.ang = 0;
+      state.throwFx.crushed = false;
+    }
+
+    // roller 出屏后：开始回弹（up）
+    if (state.flattenFx?.active) {
       state.flattenFx.phase = 'up';
       state.flattenFx.t = 0;
     }
+
+    state.theta = 0;
+    state.omega = 0;
   }
 }
 
-function initVehicleAct(act, state, L) {
-  const key = act.key ?? 'truck';
+function initVehicleAct(act, L) {
+  const minDim = L.minDim;
 
-  const s = clamp(act.strength01 ?? 0, 0, 1);
+  const sizeFactor = vehicleSizeFactor(act.key);
+  const baseW = minDim * 0.1 * sizeFactor * VEHICLE_SIZE_SCALE;
+  const ar = vehicleAspectApprox(act.key);
+  const w = baseW;
+  const h = baseW * ar;
 
-  // approximate base size (render uses real image aspect; physics uses approx)
-  const sizeFactor = getVehicleSizeFactor(key);
-  const baseW = L.minDim * 0.22 * VEHICLE_SIZE_SCALE * sizeFactor;
-  const ar = getVehicleAspectApprox(key); // h/w
-  act.w = baseW;
-  act.h = baseW * ar;
+  act.w = w;
+  act.h = h;
 
+  // y align with target center
+  act.y = L.cy;
+
+  // ✅ vehicle start positions: 1/6 & 5/6 (not fists)
   const startX = (act.side < 0) ? L.vehicleStartXL : L.vehicleStartXR;
-  act.x = startX + act.side * act.w * 0.52;
 
-  // align to target center slightly above bottom
-  act.y = L.cy + L.objH * 0.25;
+  const k = clamp(act.chargeSec / CHARGE_MAX_SEC, 0, 1);
+  const speed = minDim * lerp(VEHICLE_SPEED_MIN, VEHICLE_SPEED_MAX, k);
 
-  const dir = (act.side < 0) ? +1 : -1;
-  const speed = lerp(VEHICLE_SPEED_MIN, VEHICLE_SPEED_MAX, s) * L.minDim;
-  act.vx = dir * speed;
+  act.vx = (act.side < 0) ? (+speed) : (-speed);
+
+  // align front edge near startX
+  if (act.vx >= 0) act.x = startX - w * 0.52;
+  else act.x = startX + w * 0.52;
 }
 
-// =========================================================
-// ThrowFx (truck / car short charge)
-// =========================================================
-function startThrowFx(state, side, chargeSec, L) {
+function vehicleSizeFactor(key) {
+  if (key === 'truck') return 2.35;
+  if (key === 'car') return 2.10;
+  if (key === 'roller') return 2.25;
+  if (key === 'rocket') return 2.20;
+  return 2.20;
+}
+
+function vehicleAspectApprox(key) {
+  if (key === 'rocket') return 0.55;
+  return 0.50;
+}
+
+// ---------------------------
+// throwFx
+// ---------------------------
+function startThrowFx(state, side, chargeSec, strength01, L) {
   const fx = state.throwFx;
+
   fx.active = true;
   fx.grounded = false;
-  fx.crushed = false;
-  fx.side = side;
   fx.t = 0;
+  fx.side = side;
 
-  // position offset relative to target center
+  const p = clamp(chargeSec / VEHICLE_FLY_SEC, 0, 1);
+  const tCurve = Math.pow(p, 2.2);
+
+  const margin = L.minDim * VEHICLE_LAND_MARGIN_FRAC;
+
+  const maxDx = (side < 0)
+    ? ((L.W - margin) - L.cx)
+    : ((margin) - L.cx);
+
+  const minDx = (side < 0 ? +1 : -1) * (L.objW * 0.35);
+
+  fx.dxLand = lerp(minDx, maxDx, tCurve);
+  fx.dyLand = clamp(L.objH * 0.22, 8, L.H * 0.28);
+
+  fx.T = lerp(0.32, 0.85, tCurve);
+  fx.g = L.minDim * VEHICLE_THROW_GRAV;
+
+  fx.vx = fx.dxLand / fx.T;
+  fx.vy = (fx.dyLand - 0.5 * fx.g * fx.T * fx.T) / fx.T;
+
   fx.x = 0;
   fx.y = 0;
 
-  // Map charge time within the "throw" regime (0..VEHICLE_FLY_SEC) to [0..1].
-  // This gives an obvious horizontal-distance change with charge time.
-  const pCharge = clamp((chargeSec ?? 0) / VEHICLE_FLY_SEC, 0, 1);
-  const p = Math.pow(pCharge, 1.9);
-  fx.T = lerp(0.48, 0.92, p);
-
-  // horizontal travel and arc height
-  const dir = -side;
-  // Wider horizontal range so short vs long charge is clearly different.
-  const dx = dir * L.objW * lerp(0.08, 1.25, p);
-  const dy = L.objH * lerp(0.12, 0.42, p);
-
-  fx.dxLand = dx;
-  fx.dyLand = dy;
-
-  // initial vel so that lands at (dx, dy) with gravity
-  fx.g = VEHICLE_THROW_GRAV * L.minDim;
-  fx.vx = dx / fx.T;
-  fx.vy = -(dy / fx.T) - 0.5 * fx.g * fx.T;
-
   fx.ang = 0;
-  fx.angVel = dir * lerp(2.0, 6.0, p);
+  fx.angVel = lerp(2.0, 7.0, tCurve) * (0.7 + 0.6 * strength01);
+
+  fx.crushed = false;
 
   state.theta = 0;
   state.omega = 0;
@@ -263,47 +276,29 @@ function stepThrowFx(state, dt, L) {
   const fx = state.throwFx;
   if (!fx.active) return;
 
-  fx.t += dt;
+  if (!fx.grounded) {
+    fx.t += dt;
+    const t = fx.t;
 
-  // position in local throw space (relative to target center)
-  const t = fx.t;
-  const x = fx.vx * t;
-  const y = fx.vy * t + 0.5 * fx.g * t * t;
+    fx.x = fx.vx * t;
+    fx.y = fx.vy * t + 0.5 * fx.g * t * t;
 
-  fx.x = x;
-  fx.y = y;
+    fx.ang += fx.angVel * dt;
 
-  fx.ang += fx.angVel * dt;
-
-  // ground contact
-  const landY = fx.dyLand;
-  if (!fx.grounded && (t >= fx.T || y >= landY)) {
-    fx.grounded = true;
-    fx.x = fx.dxLand;
-    fx.y = fx.dyLand;
-
-    // landing squish/flash
-    state.squash = Math.max(state.squash, 0.55);
-    state.flash = Math.max(state.flash, 0.45);
-  }
-
-  // after landing, we just keep state; render uses grounded/crushed flags for layering
-  if (fx.grounded) {
-    fx.crushed = true;
-  }
-
-  // cleanup after a short linger
-  const maxT = fx.T + 0.9;
-  if (t > maxT) {
-    fx.active = false;
-    fx.grounded = false;
-    fx.crushed = false;
+    if (t >= fx.T || fx.y >= fx.dyLand) {
+      fx.grounded = true;
+      fx.x = fx.dxLand;
+      fx.y = fx.dyLand;
+      fx.t = 0;
+    }
+  } else {
+    fx.ang *= Math.exp(-4.0 * dt);
   }
 }
 
-// =========================================================
-// FlattenFx (roller)
-// =========================================================
+// ---------------------------
+// ✅ flattenFx (roller): down -> squash -> hold -> up
+// ---------------------------
 function startFlattenFx(state) {
   const fx = state.flattenFx;
   fx.active = true;
@@ -312,22 +307,17 @@ function startFlattenFx(state) {
   fx.rot01 = 0;
   fx.squash01 = 0;
 
-  // roller flatten should not leave any swing after it recovers
   state.theta = 0;
   state.omega = 0;
-
-  // immediate visual feedback
-  state.flash = Math.max(state.flash, 0.75);
-  state.squash = Math.max(state.squash, 0.55);
 }
 
 function stepFlattenFx(state, dt) {
   const fx = state.flattenFx;
   if (!fx.active) return;
 
-  const downDur = 0.18;
-  const squashDur = 0.12;
-  const upDur = 0.22;
+  const downDur = 0.18;     // stand -> lie down
+  const squashDur = 0.16;   // lie down -> squash
+  const upDur = 0.26;       // restore
 
   if (fx.phase === 'down') {
     fx.t += dt;
@@ -370,16 +360,15 @@ function stepFlattenFx(state, dt) {
       fx.rot01 = 0;
       fx.squash01 = 0;
 
-      // fully back to rest (no residual swing)
       state.theta = 0;
       state.omega = 0;
     }
   }
 }
 
-// =========================================================
-// Fly
-// =========================================================
+// ---------------------------
+// fly (unchanged)
+// ---------------------------
 function startFly(state, punchSide, strength01, L) {
   const fly = state.fly;
 
@@ -390,7 +379,7 @@ function startFly(state, punchSide, strength01, L) {
   const dirX = -punchSide;
 
   const base = L.minDim * (1.35 + 0.55 * strength01);
-  fly.vx = dirX * base;
+  fly.vx = dirX * base * 1.0;
   fly.vy = -base * 0.85;
 
   fly.ang = 0;
@@ -415,7 +404,7 @@ function stepFly(state, dt, L) {
   const cx = L.cx + fly.x;
   const cy = L.cy + fly.y;
 
-  const margin = L.minDim * 0.2;
+  const margin = L.minDim * 0.20;
   const out =
     (cx < -margin) || (cx > L.W + margin) ||
     (cy < -margin) || (cy > L.H + margin) ||
@@ -423,10 +412,8 @@ function stepFly(state, dt, L) {
 
   if (out) {
     fly.active = false;
-    fly.x = 0;
-    fly.y = 0;
-    fly.vx = 0;
-    fly.vy = 0;
+    fly.x = 0; fly.y = 0;
+    fly.vx = 0; fly.vy = 0;
     fly.ang = 0;
     fly.angVel = 0;
     fly.scale = 1;
@@ -436,22 +423,4 @@ function stepFly(state, dt, L) {
     state.squash = 0;
     state.flash = 0;
   }
-}
-
-// =========================================================
-// Vehicle sizing helpers
-// =========================================================
-function getVehicleSizeFactor(key) {
-  if (key === 'truck') return 1.15;
-  if (key === 'car') return 1.0;
-  if (key === 'roller') return 0.95;
-  return 1.0;
-}
-
-function getVehicleAspectApprox(key) {
-  // height / width
-  if (key === 'truck') return 0.56;
-  if (key === 'car') return 0.48;
-  if (key === 'roller') return 0.52;
-  return 0.5;
 }
