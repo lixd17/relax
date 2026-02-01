@@ -119,10 +119,25 @@ export function createUI(state, onTargetChange) {
   const metaEl = dock.querySelector('#customMeta');
 
   function syncNameInput() {
+    const isCustom = (state.targetKey === CUSTOM_TARGET_KEY);
+    if (isCustom) {
+      nameInput.value = '';
+      nameInput.placeholder = '（custom 不可命名，用于老板键）';
+      nameInput.disabled = true;
+      btnSave.disabled = true;
+      // 强制清空，避免残留
+      delete state.namesByKey[CUSTOM_TARGET_KEY];
+      return;
+    }
+
+    nameInput.disabled = false;
+    btnSave.disabled = false;
+    nameInput.placeholder = '给目标取个名字...';
     nameInput.value = state.namesByKey[state.targetKey] ?? '';
   }
 
   function commitName() {
+    if (state.targetKey === CUSTOM_TARGET_KEY) return;
     const txt = (nameInput.value ?? '').trim();
     if (txt.length === 0) {
       delete state.namesByKey[state.targetKey];
@@ -297,12 +312,20 @@ export function createUI(state, onTargetChange) {
 
   modeSel.addEventListener('change', () => {
     state.modeKey = modeSel.value;
+    // 切模式时清理可能遗留的输入/动画状态（避免交叉影响）
+    if (state.charge) state.charge.active = false;
+    if (state.punch) state.punch.active = false;
+    if (Array.isArray(state.ragePunches)) state.ragePunches.length = 0;
     rebuildToolMenu();
     updateStatusLine();
   });
 
   targetSel.addEventListener('change', () => {
     state.targetKey = targetSel.value;
+    if (state.bossKey) {
+      state.bossKey.active = false;
+      state.bossKey.prevTargetKey = state.targetKey;
+    }
     syncNameInput();
     onTargetChange?.();
     updateStatusLine();

@@ -1,6 +1,7 @@
 import {
   FIST_SIZE_FACTOR, CHARGE_MAX_SEC,
-  VEHICLE_SIZE_SCALE
+  VEHICLE_SIZE_SCALE,
+  CUSTOM_TARGET_KEY,
 } from '../core/config.js';
 
 import { clamp, lerp, easeOutCubic, easeInCubic, deg2rad } from '../core/utils.js';
@@ -19,6 +20,13 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
     return;
   }
 
+  if (mode === 'rage') {
+    drawTarget(ctx, L, state, targetImg);
+    renderRageMode(ctx, L, state, imgs, nowMs);
+    drawHint(ctx, L, state);
+    return;
+  }
+
   drawTarget(ctx, L, state, targetImg);
 
   const pose = getWeaponPose(L, state, imgs, nowMs);
@@ -28,8 +36,28 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
 }
 
 function pickTargetImage(state, imgs) {
-  if (state.targetKey === 'custom' && state.customTarget?.img) return state.customTarget.img;
+  // 老板键：强制显示沙袋（即使 custom 上传了图）
+  if (state.bossKey?.active) {
+    return imgs.targets.get('sandbag') || imgs.targets.values().next().value || imgs.fist;
+  }
+
+  if (state.targetKey === CUSTOM_TARGET_KEY && state.customTarget?.img) return state.customTarget.img;
   return imgs.targets.get(state.targetKey) || imgs.targets.values().next().value || imgs.fist;
+}
+
+// ------------------------
+// rage mode (multi-punch)
+// ------------------------
+function renderRageMode(ctx, L, state, imgs, nowMs) {
+  const list = state.ragePunches;
+  if (!Array.isArray(list) || list.length === 0) return;
+
+  for (let i = 0; i < list.length; i++) {
+    const pp = list[i];
+    if (!pp || !pp.active) continue;
+    const pose = getWeaponPoseFromPunch(L, state, imgs, pp, nowMs);
+    drawWeaponSimple(ctx, state, pose);
+  }
 }
 
 // ------------------------
@@ -298,6 +326,40 @@ function getWeaponPose(L, state, imgs, nowMs) {
   return { weaponKey, weaponImg, side, x, y, w, h, charge01, angle, needMirror };
 }
 
+function getWeaponPoseFromPunch(L, state, imgs, pp, nowMs) {
+  const { objW, objH, cx, cy, startXL, startXR, startY, minDim } = L;
+
+  const weaponKey = pp.weaponKey ?? (state.weaponKey ?? 'fist');
+  const weaponImg = imgs.weapons?.get(weaponKey) ?? imgs.fist;
+
+  const side = (pp.side ?? +1);
+  const startX = (side < 0) ? startXL : startXR;
+
+  const tgt = getTarget(state);
+  const impactX = cx + side * (objW * 0.18);
+  const impactY = (tgt.type === 'boss') ? (cy - objH * 0.12) : (cy - objH * 0.05);
+
+  const tt = clamp(pp.t ?? 0, 0, 1);
+  const tInterp = (pp.phase === 'out') ? easeOutCubic(tt) : easeInCubic(tt);
+
+  const x = lerp(startX, impactX, tInterp);
+  const y = lerp(startY, impactY, tInterp);
+
+  const charge01 = clamp(pp.strength01 ?? 0.65, 0, 1);
+  const rawSec = charge01 * CHARGE_MAX_SEC;
+
+  const sizeFactor = getWeaponSizeFactor(weaponKey);
+  const baseW = minDim * FIST_SIZE_FACTOR * sizeFactor;
+  const ar = (weaponImg && weaponImg.width > 0) ? (weaponImg.height / weaponImg.width) : 1;
+  const w = baseW;
+  const h = baseW * ar;
+
+  const angle = getWeaponAngle(weaponKey, side, tInterp, charge01, rawSec, nowMs);
+  const needMirror = (weaponKey === 'fist' || weaponKey === 'extinguisher');
+
+  return { weaponKey, weaponImg, side, x, y, w, h, charge01, angle, needMirror };
+}
+
 function getWeaponSizeFactor(key) {
   if (key === 'extinguisher') return 1.35;
   if (key === 'stick') return 1.8;
@@ -346,6 +408,20 @@ function drawWeaponAndFX(ctx, L, state, pose, nowMs, getDpr) {
     const p = clamp(state.charge.sec / CHARGE_MAX_SEC, 0, 1);
     drawChargeBar(ctx, pose.x, pose.y, pose.w, pose.h, p, getDpr());
   }
+}
+
+function drawWeaponSimple(ctx, state, pose) {
+  ctx.save();
+  if (state.flash > 0.12) {
+    const k = 2.0 * state.flash;
+    ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
+  }
+
+  ctx.translate(pose.x, pose.y);
+  if (pose.needMirror && pose.side < 0) ctx.scale(-1, 1);
+  if (pose.angle) ctx.rotate(pose.angle);
+  ctx.drawImage(pose.weaponImg, -pose.w / 2, -pose.h / 2, pose.w, pose.h);
+  ctx.restore();
 }
 
 // ------------------------
@@ -479,12 +555,17 @@ function drawNameOnTarget(ctx, state, cx, cy, objW, objH) {
 
 function drawHint(ctx, L, state) {
   if (state.interacted) return;
+  const mode = state.modeKey ?? 'punch';
+
   ctx.save();
   ctx.globalAlpha = 0.85;
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.font = `${Math.floor(L.minDim * 0.03)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('按住蓄力，松开攻击；左上角 Menu 可展开设置', L.W * 0.5, L.H * 0.18);
+  const msg = (mode === 'rage')
+    ? '狂暴：鼠标点击或按任意字母键连击；空格=老板键'
+    : '按住蓄力，松开攻击；左上角 Menu 可展开设置；空格=老板键';
+  ctx.fillText(msg, L.W * 0.5, L.H * 0.18);
   ctx.restore();
 }

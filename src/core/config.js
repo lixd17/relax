@@ -10,12 +10,14 @@ export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
   { key: 'boss1',   src: withBase('assets/boss1.png'),   type: 'boss' },
   { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
+  // custom: 仅作为上传槽 + 老板键(空格)切换用；src 为空将不会自动加载
   { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
 ];
 
 export const MODES = [
   { key: 'punch', label: 'punch' },
   { key: 'hit',   label: 'hit' },
+  { key: 'rage',  label: 'rage' },
 ];
 
 export const WEAPONS = [
@@ -29,6 +31,7 @@ export const VEHICLES = [
   { key: 'truck',  src: withBase('assets/truck.png') },
   { key: 'car',    src: withBase('assets/car.png') },
   { key: 'roller', src: withBase('assets/roller.png') },
+  // rocket 已移除（图片也可删除）
 ];
 
 export const ASSET = {
@@ -42,6 +45,11 @@ export const OBJECT_SCALE = 0.75;
 // charge
 export const CHARGE_MAX_SEC = 3.0;
 export const CLICK_THRESH_SEC = 0.12;
+
+// rage
+export const RAGE_STRENGTH01 = 0.65;       // 0..1
+export const RAGE_MAX_PUNCHES = 20;         // 同屏最多同时存在多少个“拳头动画”
+export const RAGE_MIN_INTERVAL_SEC = 0.03;  // 防止键盘长按/自动重复把性能打爆
 
 // swing
 export const SWING_MIN_DEG = 10;
@@ -58,7 +66,7 @@ export const FOOT_PIVOT_FRAC = 0.08;
 // truck/car >= 2.5s -> fly
 export const VEHICLE_FLY_SEC = 2.5;
 
-// ✅ 车辆放大倍数：改为 3x
+// 车辆放大倍数：3x
 export const VEHICLE_SIZE_SCALE = 3.0;
 
 // vehicle speed vs charge
@@ -68,4 +76,3 @@ export const VEHICLE_SPEED_MAX = 3.00;
 // throw params
 export const VEHICLE_LAND_MARGIN_FRAC = 0.12;
 export const VEHICLE_THROW_GRAV = 3.4;
-

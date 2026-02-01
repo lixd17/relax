@@ -1,10 +1,38 @@
-import { CHARGE_MAX_SEC } from '../core/config.js';
+import {
+  CHARGE_MAX_SEC,
+  RAGE_STRENGTH01,
+  RAGE_MAX_PUNCHES,
+  RAGE_MIN_INTERVAL_SEC,
+  CUSTOM_TARGET_KEY,
+} from '../core/config.js';
 import { clamp } from '../core/utils.js';
 
+function isTypingTarget(e) {
+  const el = e?.target;
+  if (!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function isLetterKey(k) {
+  if (typeof k !== 'string' || k.length !== 1) return false;
+  return ((k >= 'a' && k <= 'z') || (k >= 'A' && k <= 'Z'));
+}
+
 export function attachInput(canvas, getDpr, state, audio) {
+  // 让 canvas 可获得焦点，尽量把键盘输入留在游戏里
+  try { canvas.tabIndex = 0; } catch (_) {}
+
+  let lastRageSpawnMs = 0;
+
   function isBusy() {
     if (state.fly?.active) return true;
     if (state.vehicleAct?.active) return true;
+    // throw/flatten 在 hit 模式里出现；为了不串状态，这里也当忙
+    if (state.throwFx?.active) return true;
+    if (state.flattenFx?.active) return true;
     return false;
   }
 
@@ -34,21 +62,18 @@ export function attachInput(canvas, getDpr, state, audio) {
 
     state.charge.active = false;
 
-    // ✅ hit 模式：启动 vehicleAct（不走 punch out/back）
+    // hit 模式：启动 vehicleAct（不走 punch out/back）
     if ((state.modeKey ?? 'punch') === 'hit') {
-      // 若还在忙（保险）
       if (isBusy()) return;
 
       state.vehicleAct.active = true;
       state.vehicleAct.pendingInit = true;
       state.vehicleAct.key = state.vehicleKey ?? 'truck';
-      state.vehicleAct.side = side;
       state.vehicleAct.chargeSec = sec;
       state.vehicleAct.strength01 = clamp(sec / CHARGE_MAX_SEC, 0, 1);
-
       state.vehicleAct.hitDone = false;
 
-      // 初始化放到 physics 里（需要 layout）
+      // 初始化放到 physics 里（依赖 layout）
       state.vehicleAct.x = 0;
       state.vehicleAct.y = 0;
       state.vehicleAct.vx = 0;
@@ -62,7 +87,7 @@ export function attachInput(canvas, getDpr, state, audio) {
       return;
     }
 
-    // ✅ punch 模式：原逻辑
+    // punch 模式：原逻辑
     if (state.punch?.active) return;
     if (state.fly?.active) return;
 
@@ -72,22 +97,79 @@ export function attachInput(canvas, getDpr, state, audio) {
     state.punch.hitDone = false;
     state.punch.side = side;
     state.punch.strength = sec;
-    state.punch.over = rawSec > CHARGE_MAX_SEC; // 原 >3s
+    state.punch.over = rawSec > CHARGE_MAX_SEC;
   }
 
+  function spawnRagePunch(side) {
+    if ((state.modeKey ?? 'punch') !== 'rage') return;
+    if (isBusy()) return;
+
+    const now = performance.now();
+    if (now - lastRageSpawnMs < RAGE_MIN_INTERVAL_SEC * 1000) return;
+    lastRageSpawnMs = now;
+
+    state.interacted = true;
+
+    const p = {
+      active: true,
+      phase: 'out',
+      t: 0,
+      hitDone: false,
+      side,
+      weaponKey: state.weaponKey ?? 'fist',
+      strength01: clamp(RAGE_STRENGTH01, 0, 1),
+    };
+
+    if (!Array.isArray(state.ragePunches)) state.ragePunches = [];
+    state.ragePunches.push(p);
+
+    // cap
+    const maxN = Math.max(1, (RAGE_MAX_PUNCHES | 0));
+    if (state.ragePunches.length > maxN) {
+      state.ragePunches.splice(0, state.ragePunches.length - maxN);
+    }
+  }
+
+  function bossKeyToggle() {
+    if (!state.bossKey) state.bossKey = { active: false, prevTargetKey: state.targetKey };
+
+    if (state.bossKey.active) {
+      // restore
+      state.targetKey = state.bossKey.prevTargetKey ?? state.targetKey;
+      state.bossKey.active = false;
+    } else {
+      state.bossKey.prevTargetKey = state.targetKey;
+      state.targetKey = CUSTOM_TARGET_KEY;
+      state.bossKey.active = true;
+
+      // custom 不能命名：强制清空
+      if (state.namesByKey) state.namesByKey[CUSTOM_TARGET_KEY] = '';
+    }
+  }
+
+  // pointer
   canvas.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     canvas.setPointerCapture?.(e.pointerId);
 
+    // 尽量把焦点拉回 canvas，避免键盘敲字落到输入框
+    try { canvas.focus(); } catch (_) {}
+
     const dpr = getDpr();
     const xCanvas = e.clientX * dpr;
     const side = (xCanvas < canvas.width * 0.5) ? -1 : +1;
+
+    if ((state.modeKey ?? 'punch') === 'rage') {
+      spawnRagePunch(side);
+      return;
+    }
 
     startCharge(side);
   });
 
   canvas.addEventListener('pointerup', (e) => {
     e.preventDefault();
+    if ((state.modeKey ?? 'punch') === 'rage') return;
     releaseCharge();
   });
 
@@ -97,5 +179,30 @@ export function attachInput(canvas, getDpr, state, audio) {
     if (state.charge) state.charge.active = false;
   });
 
-  return { startCharge, releaseCharge };
+  // keyboard
+  window.addEventListener('keydown', (e) => {
+    // 空格：老板键（任何模式都可用）
+    if (e.code === 'Space' || e.key === ' ') {
+      e.preventDefault();
+      bossKeyToggle();
+      return;
+    }
+
+    // rage：任意字母触发攻击
+    if ((state.modeKey ?? 'punch') !== 'rage') return;
+
+    // 避免在输入框打字时触发攻击
+    if (isTypingTarget(e)) return;
+
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!isLetterKey(e.key)) return;
+
+    e.preventDefault();
+    e.stopPropagation?.();
+
+    const side = (Math.random() < 0.5) ? -1 : +1;
+    spawnRagePunch(side);
+  }, { passive: false });
+
+  return { startCharge, releaseCharge, spawnRagePunch, bossKeyToggle };
 }

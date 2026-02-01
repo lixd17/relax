@@ -19,6 +19,12 @@ export function createState() {
 
     namesByKey: { [CUSTOM_TARGET_KEY]: '' },
 
+    // 老板键（空格）：临时切到 custom（显示为沙袋），再按一次可切回
+    bossKey: {
+      active: false,
+      prevTargetKey: TARGETS[0].key,
+    },
+
     charge: {
       active: false,
       side: +1,
@@ -36,6 +42,9 @@ export function createState() {
       strength: 0,
       over: false,
     },
+
+    // rage 模式：允许同屏多个“出拳”动画
+    ragePunches: [],
 
     fly: {
       active: false,

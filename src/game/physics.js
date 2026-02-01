@@ -1,5 +1,6 @@
 import {
   CHARGE_MAX_SEC, CLICK_THRESH_SEC,
+  RAGE_MAX_PUNCHES,
   SWING_MIN_DEG, SWING_MAX_DEG,
   THETA_MAX_RAD,
   VEHICLE_FLY_SEC,
@@ -73,6 +74,48 @@ export function updatePhysics(state, dt, audio, L) {
         p.phase = 'idle';
         p.active = false;
       }
+    }
+  }
+
+  // rage: multiple punches (no charge)
+  if ((state.modeKey ?? 'punch') === 'rage' && Array.isArray(state.ragePunches) && state.ragePunches.length > 0) {
+    stepRagePunches(state, dt, audio, L);
+  }
+}
+
+function stepRagePunches(state, dt, audio, L) {
+  const outDur = 0.12;
+  const backDur = 0.10;
+
+  const list = state.ragePunches;
+  // 保险：太多了就截断
+  if (list.length > RAGE_MAX_PUNCHES) list.splice(0, list.length - RAGE_MAX_PUNCHES);
+
+  for (let i = list.length - 1; i >= 0; i--) {
+    const pp = list[i];
+    if (!pp || !pp.active) {
+      list.splice(i, 1);
+      continue;
+    }
+
+    if (pp.phase === 'out') {
+      pp.t += dt / outDur;
+      if (!pp.hitDone && pp.t >= 1.0) {
+        pp.hitDone = true;
+        pp.t = 1.0;
+
+        const strength01 = clamp(pp.strength01 ?? 0.65, 0, 1);
+        applyPunchHit(state, pp.side ?? 1, strength01, false, audio, L);
+
+        pp.phase = 'back';
+      }
+    } else if (pp.phase === 'back') {
+      pp.t -= dt / backDur;
+      if (pp.t <= 0) {
+        list.splice(i, 1);
+      }
+    } else {
+      list.splice(i, 1);
     }
   }
 }
@@ -220,12 +263,10 @@ function vehicleSizeFactor(key) {
   if (key === 'truck') return 2.35;
   if (key === 'car') return 2.10;
   if (key === 'roller') return 2.25;
-  if (key === 'rocket') return 2.20;
   return 2.20;
 }
 
 function vehicleAspectApprox(key) {
-  if (key === 'rocket') return 0.55;
   return 0.50;
 }
 

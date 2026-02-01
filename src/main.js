@@ -16,9 +16,15 @@ import { renderFrame } from './game/render.js';
 const app = document.querySelector('#app');
 
 function pickTargetImage(state, imgs) {
+  // 老板键：强制显示沙袋（即使 custom 有上传图）
+  if (state.bossKey?.active) {
+    return imgs.targets.get('sandbag') || imgs.targets.values().next().value || imgs.fist;
+  }
+
   if (state.targetKey === 'custom' && state.customTarget?.img) {
     return state.customTarget.img;
   }
+
   return imgs.targets.get(state.targetKey) || imgs.targets.values().next().value || imgs.fist;
 }
 
@@ -38,6 +44,7 @@ async function main() {
     // 复位 punch/charge
     state.punch.active = false;
     state.charge.active = false;
+    if (Array.isArray(state.ragePunches)) state.ragePunches.length = 0;
 
     // 复位 hit
     state.vehicleAct.active = false;
