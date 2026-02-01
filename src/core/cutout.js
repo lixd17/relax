@@ -97,10 +97,10 @@ export async function cutoutPerson(src, opt = {}) {
     if (!res || !res.categoryMask) return null;
 
     // Mask values may be uint8 [0..255] or float [0..1].
-    const mask = res.categoryMask.getAsFloat32Array
+    const maskRaw = res.categoryMask.getAsFloat32Array
       ? res.categoryMask.getAsFloat32Array()
       : res.categoryMask.getAsUint8Array();
-    if (!mask || mask.length < w * h) return null;
+    if (!maskRaw || maskRaw.length < w * h) return null;
 
     // Build output with alpha.
     const out = document.createElement('canvas');
@@ -115,19 +115,62 @@ export async function cutoutPerson(src, opt = {}) {
     const t1 = typeof opt.t1 === 'number' ? opt.t1 : 0.55;
     const softness = typeof opt.softness === 'number' ? opt.softness : 0.25;
 
-    // Detect range
+    // Detect range (Uint8 mask => [0..255], Float32 mask => [0..1])
+    const isUint8 = (maskRaw instanceof Uint8Array);
     let maxV = 0;
-    for (let i = 0; i < Math.min(mask.length, 1024); i++) {
-      if (mask[i] > maxV) maxV = mask[i];
+    if (!isUint8) {
+      for (let i = 0; i < Math.min(maskRaw.length, 2048); i++) {
+        if (maskRaw[i] > maxV) maxV = maskRaw[i];
+      }
     }
-    const needScale255 = maxV > 1.5;
+    const needScale255 = isUint8 || (maxV > 1.5);
 
-    const inv = 1 / Math.max(1e-6, (t1 - t0));
-    for (let i = 0; i < w * h; i++) {
-      let m = mask[i];
-      if (needScale255) m = m / 255;
+    // Convert to float [0..1]
+    const mask = maskRaw;
+    const to01 = (v) => (needScale255 ? (v / 255) : v);
+
+    // Heuristic: decide whether mask represents foreground(person) or background.
+    // For selfies, person is typically near center; background near corners.
+    const clampi = (x, lo, hi) => Math.max(lo, Math.min(hi, x | 0));
+    function meanBox(x0, x1, y0, y1) {
+      const ix0 = clampi(x0 * w, 0, w - 1);
+      const ix1 = clampi(x1 * w, 0, w);
+      const iy0 = clampi(y0 * h, 0, h - 1);
+      const iy1 = clampi(y1 * h, 0, h);
+      let s = 0;
+      let n = 0;
+      for (let y = iy0; y < iy1; y++) {
+        const row = y * w;
+        for (let x = ix0; x < ix1; x++) {
+          s += to01(mask[row + x]);
+          n++;
+        }
+      }
+      return n > 0 ? (s / n) : 0;
+    }
+
+    const c = meanBox(0.35, 0.65, 0.30, 0.70);
+    const c1 = meanBox(0.00, 0.18, 0.00, 0.18);
+    const c2 = meanBox(0.82, 1.00, 0.00, 0.18);
+    const c3 = meanBox(0.00, 0.18, 0.82, 1.00);
+    const c4 = meanBox(0.82, 1.00, 0.82, 1.00);
+    const corners = (c1 + c2 + c3 + c4) / 4;
+
+    // If center and corners are almost the same, segmentation likely failed.
+    const contrast = Math.abs(c - corners);
+    if (contrast < 0.03) return null;
+
+    // If center is "less" than corners, it's likely background probability -> invert.
+    const invert = (c < corners);
+
+    const invT = 1 / Math.max(1e-6, (t1 - t0));
+    let opaqueCount = 0;
+    const N = w * h;
+    for (let i = 0; i < N; i++) {
+      let m = to01(mask[i]);
+      if (invert) m = 1 - m;
       // Smooth step-ish
-      let a = (m - t0) * inv;
+      let a = (m - t0) * invT;
       if (a < 0) a = 0;
       if (a > 1) a = 1;
 
@@ -138,8 +181,14 @@ export async function cutoutPerson(src, opt = {}) {
         a = a * (1 - s) + (a * a * (3 - 2 * a)) * s;
       }
 
-      data[i * 4 + 3] = Math.round(a * 255);
+      const A = Math.round(a * 255);
+      data[i * 4 + 3] = A;
+      if (A > 18) opaqueCount++;
     }
+
+    // Sanity check: avoid "only edges" or "everything" results.
+    const opaqueFrac = opaqueCount / Math.max(1, N);
+    if (opaqueFrac < 0.02 || opaqueFrac > 0.97) return null;
 
     octx.putImageData(im, 0, 0);
     return out;

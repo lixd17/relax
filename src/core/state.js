@@ -13,9 +13,10 @@ export function createState() {
     targetKey: TARGETS[0].key,
 
     // custom 上传：
-    // - src: 原始(已缩放)图，用于手动裁剪/再次抠图
-    // - img: 最终用于渲染的贴图（可能带透明）
-    customTarget: { src: null, img: null, meta: null },
+    // - src   : 原始(已缩放)图（用于切回原图 / 重新抠图）
+    // - cutout: 抠图结果（可能为 null）
+    // - img   : 最终用于渲染的贴图（src 或 cutout，再叠加自动裁剪透明边缘）
+    customTarget: { src: null, cutout: null, img: null, meta: null },
 
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
     vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),

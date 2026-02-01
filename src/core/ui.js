@@ -6,7 +6,6 @@ import {
   autoCropAlphaCanvas,
 } from './utils.js';
 import { cutoutPerson } from './cutout.js';
-import { openCropper } from './cropper.js';
 
 export function createUI(state, onTargetChange) {
   // HMR 防重复
@@ -35,7 +34,7 @@ export function createUI(state, onTargetChange) {
       <div class="panel" id="objectPanel">
         <div class="panelTitle">Object</div>
         <div class="hint">
-          上传图片后会优先尝试<strong>人像抠图（Beta）</strong>；效果不好可用“手动裁剪”兜底。透明 PNG 仍可勾选“自动裁剪透明边缘”。
+          建议上传<strong>只含人像的长方形图</strong>（主体居中、背景干净）。上传后会优先尝试<strong>人像抠图（Beta）</strong>；如果效果不好，可以一键切回<strong>原图</strong>。
         </div>
 
         <div class="row">
@@ -65,7 +64,8 @@ export function createUI(state, onTargetChange) {
             <input id="autoCutout" type="checkbox" checked />
             自动抠人像（Beta）
           </label>
-          <button id="manualCrop" type="button">手动裁剪</button>
+          <button id="useCutout" type="button">用抠图</button>
+          <button id="useOriginal" type="button">用原图</button>
         </div>
 
         <div class="hint" id="customMeta"></div>
@@ -230,7 +230,8 @@ export function createUI(state, onTargetChange) {
   const btnClear = dock.querySelector('#imgClear');
   const autoCrop = dock.querySelector('#autoCrop');
   const autoCutout = dock.querySelector('#autoCutout');
-  const btnManualCrop = dock.querySelector('#manualCrop');
+  const btnUseCutout = dock.querySelector('#useCutout');
+  const btnUseOriginal = dock.querySelector('#useOriginal');
   const preview = dock.querySelector('#customPreview');
   const metaEl = dock.querySelector('#customMeta');
 
@@ -241,7 +242,8 @@ export function createUI(state, onTargetChange) {
     btnClear.disabled = busy;
     autoCrop.disabled = busy;
     autoCutout.disabled = busy;
-    btnManualCrop.disabled = busy;
+    btnUseCutout.disabled = busy;
+    btnUseOriginal.disabled = busy;
     if (msg != null) metaEl.textContent = msg;
   }
 
@@ -293,6 +295,8 @@ export function createUI(state, onTargetChange) {
 
     const img = state.customTarget?.img;
     if (!img) {
+      btnUseCutout.disabled = true;
+      btnUseOriginal.disabled = true;
       ctx.globalAlpha = 0.35;
       ctx.fillStyle = '#fff';
       ctx.font = '12px sans-serif';
@@ -316,15 +320,61 @@ export function createUI(state, onTargetChange) {
 
     const m = state.customTarget?.meta;
     if (m) {
-      const tags = [m.cutout ? '抠图' : null, m.cropped ? '裁剪' : null].filter(Boolean).join(' / ');
+      const using = (m.using === 'original') ? '原图' : (m.using === 'cutout' ? '抠图' : null);
+      const tags = [using, m.cropped ? '裁剪' : null].filter(Boolean).join(' / ');
       metaEl.textContent = `已加载：${m.w}×${m.h}${tags ? `（${tags}）` : ''}`;
     } else {
       metaEl.textContent = `已加载：${iw}×${ih}`;
     }
+
+    // button enable state
+    btnUseCutout.disabled = !canUseCustomVariant('cutout');
+    btnUseOriginal.disabled = !canUseCustomVariant('original');
+  }
+
+  function canUseCustomVariant(variant) {
+    if (!state.customTarget) return false;
+    if (variant === 'original') return !!state.customTarget.src;
+    if (variant === 'cutout') return !!state.customTarget.cutout;
+    return false;
+  }
+
+  function applyCustomVariant(variant, fromLabel) {
+    if (!state.customTarget) return;
+    const base = (variant === 'cutout') ? state.customTarget.cutout : state.customTarget.src;
+    if (!base) return;
+
+    let canvas = base;
+    let cropped = false;
+    if (autoCrop.checked) {
+      const out = autoCropAlphaCanvas(canvas, 10, 6);
+      if (out !== canvas) {
+        canvas = out;
+        cropped = true;
+      }
+    }
+
+    state.customTarget.img = canvas;
+    state.customTarget.meta = {
+      w: canvas.width,
+      h: canvas.height,
+      cropped,
+      using: variant,
+      from: fromLabel || state.customTarget?.meta?.from || 'upload',
+    };
+
+    drawPreviewFromCustom();
+    updateStatusLine();
+    // 仅当当前就是 custom 才触发重绘（避免老板键场景误触）
+    if (state.targetKey === CUSTOM_TARGET_KEY) onTargetChange?.();
+
+    // button enable state
+    btnUseCutout.disabled = !canUseCustomVariant('cutout');
+    btnUseOriginal.disabled = !canUseCustomVariant('original');
   }
 
   async function setCustomTargetFromFile(file) {
-    if (!state.customTarget) state.customTarget = { src: null, img: null, meta: null };
+    if (!state.customTarget) state.customTarget = { src: null, cutout: null, img: null, meta: null };
     const epoch = ++customEpoch;
     setBusy(true, '处理中...');
 
@@ -338,11 +388,13 @@ export function createUI(state, onTargetChange) {
 
       // 先缩放，避免手机拍照大图占用过高
       const srcCanvas = imageToCanvasScaled(img, 2048);
-      state.customTarget.src = srcCanvas;
-      let canvas = srcCanvas;
+      state.customTarget.src = srcCanvas;      // 原图（缩放后）
+      state.customTarget.cutout = null;        // 清理旧抠图
 
-      // 先做人像抠图（Beta），失败就保留原图（再靠手动裁剪兜底）
-      let cutout = false;
+      let canvas = srcCanvas;
+      let using = 'original';
+
+      // 先做人像抠图（Beta），失败就保留原图（可一键切回/对比）
       if (autoCutout.checked) {
         metaEl.textContent = '人像抠图中...（首次会加载模型）';
         const out = await cutoutPerson(canvas);
@@ -351,10 +403,11 @@ export function createUI(state, onTargetChange) {
           return;
         }
         if (out) {
+          state.customTarget.cutout = out;
           canvas = out;
-          cutout = true;
+          using = 'cutout';
         } else {
-          metaEl.textContent = '未检测到人像或抠图失败（可用手动裁剪兜底）';
+          metaEl.textContent = '未检测到人像或抠图失败：已保留原图（可稍后点“用原图/用抠图”切换）';
         }
       }
 
@@ -374,7 +427,7 @@ export function createUI(state, onTargetChange) {
         w: canvas.width,
         h: canvas.height,
         cropped,
-        cutout,
+        using,
         from: file.name || 'upload',
       };
 
@@ -383,6 +436,9 @@ export function createUI(state, onTargetChange) {
       targetSel.value = CUSTOM_TARGET_KEY;
       syncNameInput();
       drawPreviewFromCustom();
+      // enable switching buttons
+      btnUseCutout.disabled = !canUseCustomVariant('cutout');
+      btnUseOriginal.disabled = !canUseCustomVariant('original');
       onTargetChange?.();
       updateStatusLine();
       setBusy(false);
@@ -392,63 +448,6 @@ export function createUI(state, onTargetChange) {
       drawPreviewFromCustom();
       setBusy(false);
     }
-  }
-
-  async function runManualCrop() {
-    const src = state.customTarget?.src || state.customTarget?.img;
-    if (!src) {
-      metaEl.textContent = '还没有上传图片。';
-      return;
-    }
-
-    const epoch = ++customEpoch;
-    setBusy(true, '打开裁剪器...');
-
-    const ret = await openCropper(src, { title: '手动裁剪（兜底）' });
-    if (epoch !== customEpoch) return;
-    if (!ret || !ret.canvas) {
-      setBusy(false);
-      return;
-    }
-
-    // 裁剪后的图作为新的 src
-    state.customTarget.src = ret.canvas;
-    let canvas = ret.canvas;
-
-    // 裁剪后可再次尝试抠人像
-    let cutout = false;
-    if (autoCutout.checked) {
-      metaEl.textContent = '裁剪完成，正在抠人像...';
-      const out = await cutoutPerson(canvas);
-      if (epoch !== customEpoch) return;
-      if (out) {
-        canvas = out;
-        cutout = true;
-      }
-    }
-
-    let cropped = false;
-    if (autoCrop.checked) {
-      const out2 = autoCropAlphaCanvas(canvas, 10, 6);
-      if (out2 !== canvas) {
-        canvas = out2;
-        cropped = true;
-      }
-    }
-
-    state.customTarget.img = canvas;
-    state.customTarget.meta = {
-      w: canvas.width,
-      h: canvas.height,
-      cropped,
-      cutout,
-      from: 'manual crop',
-    };
-
-    // 手动裁剪不自动切 target（避免老板键场景误触），但如果当前就是 custom，就更新预览
-    drawPreviewFromCustom();
-    updateStatusLine();
-    setBusy(false);
   }
 
   imgInput.addEventListener('change', async () => {
@@ -461,6 +460,7 @@ export function createUI(state, onTargetChange) {
   btnClear.addEventListener('click', () => {
     if (state.customTarget) {
       state.customTarget.src = null;
+      state.customTarget.cutout = null;
       state.customTarget.img = null;
       state.customTarget.meta = null;
     }
@@ -476,8 +476,35 @@ export function createUI(state, onTargetChange) {
     updateStatusLine();
   });
 
-  btnManualCrop.addEventListener('click', () => {
-    runManualCrop();
+  btnUseOriginal.addEventListener('click', () => {
+    if (!canUseCustomVariant('original')) return;
+    applyCustomVariant('original', state.customTarget?.meta?.from || 'upload');
+  });
+
+  btnUseCutout.addEventListener('click', async () => {
+    if (!state.customTarget?.src) return;
+    // 如果还没有算过抠图，则现算一次
+    if (!state.customTarget.cutout) {
+      const epoch = ++customEpoch;
+      setBusy(true, '人像抠图中...（首次会加载模型）');
+      const out = await cutoutPerson(state.customTarget.src);
+      if (epoch !== customEpoch) return;
+      if (out) {
+        state.customTarget.cutout = out;
+      } else {
+        metaEl.textContent = '未检测到人像或抠图失败：已保留原图。';
+      }
+      setBusy(false);
+    }
+    if (!canUseCustomVariant('cutout')) return;
+    applyCustomVariant('cutout', state.customTarget?.meta?.from || 'upload');
+  });
+
+  autoCrop.addEventListener('change', () => {
+    // 改动“自动裁剪透明边缘”时，重新应用当前变体
+    const using = state.customTarget?.meta?.using || 'original';
+    if (using === 'cutout' && canUseCustomVariant('cutout')) applyCustomVariant('cutout');
+    else if (canUseCustomVariant('original')) applyCustomVariant('original');
   });
 
   // ---------- Controls: mode/target/tool ----------
