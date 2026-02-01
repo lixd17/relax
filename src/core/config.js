@@ -10,17 +10,16 @@ export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
   { key: 'boss1',   src: withBase('assets/boss1.png'),   type: 'boss' },
   { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
-  // ✅ 用户自定义目标（图片由 UI 上传；这里不提供 src）
+  // ✅ 用户上传的自定义目标：不提供 src（由 UI 上传）
   { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
 ];
 
-// ✅ Mode（punch=现有逻辑；hit=vehicle 菜单）
 export const MODES = [
   { key: 'punch', label: 'punch' },
   { key: 'hit',   label: 'hit' },
 ];
 
-// ✅ 道具列表（punch 模式用）
+// punch 模式使用
 export const WEAPONS = [
   { key: 'fist',         src: withBase('assets/fist.png') },
   { key: 'extinguisher', src: withBase('assets/extinguisher.png') },
@@ -28,9 +27,7 @@ export const WEAPONS = [
   { key: 'banana',       src: withBase('assets/banana.png') },
 ];
 
-// ✅ 交通工具列表（hit 模式用）
-// 注意：你需要在 public/assets/ 下放置这些图片：
-// truck.png, car.png, roller.png, rocket.png
+// hit 模式使用（你需要把这些图片放到 public/assets/）
 export const VEHICLES = [
   { key: 'truck',  src: withBase('assets/truck.png') },
   { key: 'car',    src: withBase('assets/car.png') },
@@ -55,7 +52,7 @@ export const CLICK_THRESH_SEC = 0.12;
 export const SWING_MIN_DEG = 10;
 export const SWING_MAX_DEG = 80;
 
-// 拳头/道具基准大小（只随屏幕）
+// 拳头/道具/交通工具基准大小（只随屏幕）
 export const FIST_SIZE_FACTOR = 0.1;
 
 // 目标角度限幅

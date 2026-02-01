@@ -37,22 +37,22 @@ export function createState() {
 
     interacted: false,
 
-    // ✅ 左上角 Mode
+    // ✅ Mode
     modeKey: 'punch',
 
-    // ✅ 当前目标
+    // ✅ 目标
     targetKey: TARGETS[0].key,
 
-    // ✅ 用户上传的自定义目标（draw/layout 会优先用这里的 img）
+    // ✅ 自定义目标（上传图片后设置）
     customTarget: {
-      img: null,      // HTMLImageElement | HTMLCanvasElement | null
-      meta: null,     // { w,h, cropped:boolean, from:string } | null
+      img: null,   // HTMLCanvasElement | HTMLImageElement | null
+      meta: null,  // { w,h,cropped,from } | null
     },
 
-    // ✅ punch 模式：道具选择（默认 fist）
+    // ✅ punch 模式：道具
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
 
-    // ✅ hit 模式：交通工具选择（默认 truck）
+    // ✅ hit 模式：交通工具
     vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),
 
     // ✅ 每个目标自己的名字（包含 custom）

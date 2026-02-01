@@ -18,14 +18,14 @@ export async function loadAllImages() {
   const targets = new Map();
   await Promise.all(
     TARGETS.map(async (t) => {
-      // ✅ custom target 没有 src（由 UI 上传），跳过
+      // ✅ custom target 无 src，跳过
       if (!t.src) return;
       const img = await loadImageSafe(t.src);
       if (img) targets.set(t.key, img);
     })
   );
 
-  // ✅ weapons（缺图不崩：fallback 到 fist）
+  // weapons（缺图不崩：fallback 到 fist）
   const weapons = new Map();
   await Promise.all(
     WEAPONS.map(async (w) => {
@@ -34,7 +34,7 @@ export async function loadAllImages() {
     })
   );
 
-  // ✅ vehicles（缺图不崩：fallback 到 fist）
+  // vehicles（缺图不崩：fallback 到 fist）
   const vehicles = new Map();
   await Promise.all(
     VEHICLES.map(async (v) => {

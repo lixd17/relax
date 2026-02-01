@@ -1,4 +1,4 @@
-console.log('[RELAX BUILD]', '2026-01-31-a');
+console.log('[RELAX BUILD]', '2026-01-31-b');
 
 import './style.css';
 
@@ -7,7 +7,6 @@ import { setupCanvas } from './core/canvas.js';
 import { createUI } from './core/ui.js';
 import { loadAllImages } from './core/assets.js';
 import { createHitAudio } from './core/audio.js';
-import { TARGETS } from './core/config.js';
 
 import { computeLayout } from './game/layout.js';
 import { attachInput } from './game/input.js';
@@ -20,7 +19,8 @@ function pickTargetImage(state, imgs) {
   if (state.targetKey === 'custom' && state.customTarget?.img) {
     return state.customTarget.img;
   }
-  return imgs.targets.get(state.targetKey) || imgs.targets.get(TARGETS[0].key) || imgs.fist;
+  // fallback to first available
+  return imgs.targets.get(state.targetKey) || imgs.targets.values().next().value || imgs.fist;
 }
 
 async function main() {
@@ -30,7 +30,6 @@ async function main() {
   const { canvas, ctx, getDpr } = setupCanvas(app);
   const imgs = await loadAllImages();
 
-  // UI：切换目标时顺便把状态收敛一下，避免切换瞬间还在狂摆/飞行
   createUI(state, () => {
     state.theta = 0;
     state.omega = 0;
@@ -39,7 +38,6 @@ async function main() {
     state.punch.active = false;
     state.charge.active = false;
 
-    // ✅ 打飞状态也要复位
     if (state.fly) {
       state.fly.active = false;
       state.fly.x = 0;
@@ -52,10 +50,8 @@ async function main() {
     }
   });
 
-  // Input
   attachInput(canvas, getDpr, state, audio);
 
-  // Loop
   let lastT = performance.now();
   function frame(now) {
     const dt = (now - lastT) / 1000;

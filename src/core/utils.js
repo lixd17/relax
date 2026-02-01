@@ -46,7 +46,7 @@ export function imageToCanvasScaled(img, maxSide = 2048) {
   return c;
 }
 
-// ✅ 仅对“带透明背景”的 PNG 非常好用：自动裁掉四周透明边
+// ✅ 对带透明背景 PNG 很有效：裁掉四周透明边
 export function autoCropAlphaCanvas(canvas, alphaThreshold = 10, pad = 4) {
   const w = canvas.width;
   const h = canvas.height;
@@ -59,7 +59,6 @@ export function autoCropAlphaCanvas(canvas, alphaThreshold = 10, pad = 4) {
   let minX = w, minY = h, maxX = -1, maxY = -1;
   let hasAlpha = false;
 
-  // 扫描 alpha
   for (let y = 0; y < h; y++) {
     const row = y * w * 4;
     for (let x = 0; x < w; x++) {
@@ -74,7 +73,6 @@ export function autoCropAlphaCanvas(canvas, alphaThreshold = 10, pad = 4) {
     }
   }
 
-  // 没有任何非透明像素 or 没透明通道：直接返回原图
   if (!hasAlpha || maxX < 0) return canvas;
 
   minX = Math.max(0, minX - pad);
@@ -84,8 +82,6 @@ export function autoCropAlphaCanvas(canvas, alphaThreshold = 10, pad = 4) {
 
   const cw = Math.max(1, maxX - minX + 1);
   const ch = Math.max(1, maxY - minY + 1);
-
-  // 裁剪结果太小就不裁了（避免极端噪点）
   if (cw < 16 || ch < 16) return canvas;
 
   const out = document.createElement('canvas');

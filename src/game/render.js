@@ -21,6 +21,7 @@ function pickTargetImage(state, imgs) {
   }
   const img = imgs.targets.get(state.targetKey);
   if (img) return img;
+
   // fallback: 任取一个目标
   const it = imgs.targets.values().next();
   return it.value ?? imgs.fist;
@@ -63,11 +64,9 @@ function drawTarget(ctx, L, state, targetImg) {
   const fly = state.fly;
   const isFly = !!(fly && fly.active);
 
-  // ✅ 飞行位移后的中心
   const cx2 = isFly ? (cx + fly.x) : cx;
   const cy2 = isFly ? (cy + fly.y) : cy;
 
-  // 飞行时不做挤压（避免二次缩放叠加太怪）
   const s = isFly ? 0 : clamp(state.squash, 0, 1);
   const squashK = (tgt.type === 'boss') ? 0.06 : 0.10;
   const stretchK = (tgt.type === 'boss') ? 0.08 : 0.12;
@@ -76,7 +75,6 @@ function drawTarget(ctx, L, state, targetImg) {
 
   ctx.save();
 
-  // ✅ 先应用旋转：正常=绕脚枢轴摆动；飞行=绕目标中心旋转
   if (isFly) {
     const ang = fly.ang || 0;
     const sc = clamp((fly.scale ?? 1), 0.0001, 10);
@@ -91,7 +89,6 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.translate(-pivotX, -pivotY);
   }
 
-  // 绳子：飞行时不画（不然像拴着飞走）
   if (!isFly && tgt.type === 'bag') {
     ctx.save();
     ctx.strokeStyle = 'rgba(220,230,255,0.25)';
@@ -103,7 +100,6 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.restore();
   }
 
-  // ✅ 挤压缩放（围绕“当前中心”）
   ctx.translate(cx2, cy2);
   ctx.scale(scaleX, scaleY);
   ctx.translate(-cx2, -cy2);
@@ -111,15 +107,7 @@ function drawTarget(ctx, L, state, targetImg) {
   const x = cx2 - objW / 2;
   const y = cy2 - objH / 2;
 
-  // 兼容：没图时画个占位
-  if (targetImg) {
-    ctx.drawImage(targetImg, x, y, objW, objH);
-  } else {
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(x, y, objW, objH);
-    ctx.restore();
-  }
+  if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
 
   if (state.flash > 0.02) {
     ctx.save();
@@ -129,7 +117,6 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.restore();
   }
 
-  // ✅ 名字跟随（平移/旋转/缩放都跟着）
   drawNameOnTarget(ctx, state, cx2, cy2, objW, objH);
 
   ctx.restore();
@@ -142,58 +129,48 @@ function getToolPose(L, state, imgs, nowMs) {
   const key = tool.key;
   const toolImg = tool.img;
 
-  // side
   let side = +1;
   if (state.charge?.active) side = state.charge.side;
   else if (state.punch?.active) side = state.punch.side;
 
   const startX = (side < 0) ? startXL : startXR;
 
-  // impact
   const tgt = getTarget(state);
   const impactX = cx + side * (objW * 0.18);
   const impactY = (tgt.type === 'boss') ? (cy - objH * 0.12) : (cy - objH * 0.05);
 
-  // punch 插值参数（与位置一致，保证旋转“逐渐”）
   let tInterp = 0;
   if (state.punch?.active) {
     const p = state.punch;
     const tt = clamp(p.t, 0, 1);
     if (p.phase === 'out') tInterp = easeOutCubic(tt);
-    else tInterp = easeInCubic(tt); // back: p.t 从 1->0
+    else tInterp = easeInCubic(tt);
   }
 
-  // position
   let x = startX, y = startY;
   if (state.punch?.active) {
     x = lerp(startX, impactX, tInterp);
     y = lerp(startY, impactY, tInterp);
   }
 
-  // charge strength (0..1)
   const charge01 = state.charge?.active
     ? clamp(state.charge.sec / CHARGE_MAX_SEC, 0, 1)
     : (state.punch?.active ? clamp(state.punch.strength / CHARGE_MAX_SEC, 0, 1) : 0);
 
-  // raw charge seconds（banana 用：蓄力越久旋转越快；可超过3s）
   let rawSec = 0;
   if (state.charge?.active) rawSec = (state.charge.rawSec ?? state.charge.sec ?? 0);
   else if (state.punch?.active) rawSec = (state.punch.strength ?? 0);
 
-  // size
   const sizeFactor = getToolSizeFactor(tool.mode, key);
   const baseW = minDim * FIST_SIZE_FACTOR * sizeFactor;
 
-  // keep aspect ratio
   const ar = (toolImg && toolImg.width > 0) ? (toolImg.height / toolImg.width) : 1;
   const w = baseW;
   const h = baseW * ar;
 
-  // rotation
   const angle = getToolAngle(tool.mode, key, side, tInterp, charge01, rawSec, nowMs);
 
-  // mirror（默认都镜像，stick/banana 只用角度控制）
-  const needMirror = (key !== 'stick' && key !== 'banana');
+  const needMirror = (tool.mode === 'hit') ? true : (key === 'fist' || key === 'extinguisher');
 
   return { toolMode: tool.mode, toolKey: key, toolImg, side, x, y, w, h, charge01, angle, needMirror };
 }
@@ -207,58 +184,42 @@ function getToolSizeFactor(mode, key) {
     return 2.20;
   }
 
-  // punch mode
   if (key === 'extinguisher') return 1.35;
   if (key === 'stick') return 1.8;
   if (key === 'banana') return 1.40;
-  return 1.00; // fist
+  return 1.00;
 }
 
 function getToolAngle(mode, key, side, tInterp, charge01, rawSec, nowMs) {
   if (mode === 'hit') {
-    // ✅ 交通工具：先用“跟拳套一样”的逻辑，不额外旋转
+    // 交通工具先默认跟拳套一样：不额外旋转
     return 0;
   }
 
   if (key === 'stick') {
-    // ✅ 棍子：在“二四象限 45°”附近逐渐旋转
-    const base = Math.PI / 4;   // 45°
+    const base = Math.PI / 4;
     const d = deg2rad(25);
-
-    // Canvas: 角度正向为顺时针
     const a0 = (side > 0) ? (base + d) : (base - d);
     const a1 = (side > 0) ? (base - d) : (base + d);
-
     return lerp(a0, a1, clamp(tInterp, 0, 1));
   }
 
   if (key === 'banana') {
-    // ✅ 香蕉皮：旋转速度随“蓄力时间”增加（rawSec 可>3s）
     const now = nowMs * 0.001;
-
-    // 0..2 倍区间（>3s仍会继续变快一点）
     const k = clamp(rawSec / CHARGE_MAX_SEC, 0, 2);
-
-    // 基础旋转 + 速度增益（越蓄越快）
     const spinRate = lerp(1.0, 5.0, clamp(k, 0, 1));
-
-    // 左右出拳反向旋转
     const dir = (side > 0) ? 1 : -1;
-
     return dir * now * spinRate;
   }
 
-  // fist/extinguisher 默认不旋转
   return 0;
 }
 
 function drawToolAndFX(ctx, L, state, imgs, pose, nowMs, getDpr) {
   if (!state.charge?.active && !state.punch?.active) return;
 
-  // 蓄力特效（越久越强）
   drawChargeFX(ctx, pose, nowMs);
 
-  // 画道具 / 交通工具
   ctx.save();
 
   if (state.flash > 0.12) {
@@ -268,17 +229,13 @@ function drawToolAndFX(ctx, L, state, imgs, pose, nowMs, getDpr) {
 
   ctx.translate(pose.x, pose.y);
 
-  // 镜像
   if (pose.needMirror && pose.side < 0) ctx.scale(-1, 1);
-
-  // 旋转
   if (pose.angle) ctx.rotate(pose.angle);
 
   ctx.drawImage(pose.toolImg, -pose.w / 2, -pose.h / 2, pose.w, pose.h);
 
   ctx.restore();
 
-  // 蓄力条
   if (state.charge?.active) {
     const p = clamp(state.charge.sec / CHARGE_MAX_SEC, 0, 1);
     drawChargeBar(ctx, pose.x, pose.y, pose.w, pose.h, p, getDpr());
@@ -420,6 +377,6 @@ function drawHint(ctx, L, state) {
   ctx.font = `${Math.floor(L.minDim * 0.03)}px sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('按住蓄力，松开出拳；左上角可命名/上传对象；选择 mode/target/道具或交通工具', L.W * 0.5, L.H * 0.18);
+  ctx.fillText('按住蓄力，松开出拳；左上角 Menu 可展开设置', L.W * 0.5, L.H * 0.18);
   ctx.restore();
 }

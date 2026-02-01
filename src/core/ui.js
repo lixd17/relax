@@ -8,59 +8,115 @@ import {
 
 export function createUI(state, onTargetChange) {
   // HMR 防重复
-  document.getElementById('hudLeft')?.remove();
+  document.getElementById('menuDock')?.remove();
+  document.getElementById('menuOverlay')?.remove();
 
-  // 左上：HUD 容器（避免手机安全区/回车布局问题）
-  const hudLeft = document.createElement('div');
-  hudLeft.id = 'hudLeft';
-  document.body.appendChild(hudLeft);
+  // 半透明遮罩（打开菜单时启用；点空白处收回）
+  const overlay = document.createElement('div');
+  overlay.id = 'menuOverlay';
+  overlay.style.display = 'none';
+  document.body.appendChild(overlay);
 
-  // ------------------------------
-  // Panel A: Object（命名 + 上传）
-  // ------------------------------
-  const objectPanel = document.createElement('div');
-  objectPanel.id = 'objectPanel';
-  objectPanel.className = 'panel';
-  objectPanel.innerHTML = `
-    <div class="panelTitle">Object</div>
-    <div class="hint">
-      建议上传<strong>仅含身体的长方形</strong>图片。若是带透明背景的 PNG，可勾选“自动裁剪透明边缘”。
-      <span class="mobileNote">（手机端：输入完点“保存”，或点空白处即可生效）</span>
+  // 总菜单容器
+  const dock = document.createElement('div');
+  dock.id = 'menuDock';
+  dock.innerHTML = `
+    <div id="menuHeader">
+      <button id="menuToggle" type="button" aria-label="menu">☰</button>
+      <div id="menuTitle">Menu</div>
+      <div id="menuStatus"></div>
     </div>
 
-    <div class="row">
-      <label for="nameInput">Name</label>
-      <input id="nameInput" placeholder="输入后保存" enterkeyhint="done" />
-      <button id="nameSave" type="button">保存</button>
-    </div>
+    <div id="menuBody">
+      <div class="panel" id="objectPanel">
+        <div class="panelTitle">Object</div>
+        <div class="hint">
+          建议上传<strong>仅含身体的长方形</strong>图片（初期不做抠图）。若是带透明背景的 PNG，可勾选“自动裁剪透明边缘”。
+        </div>
 
-    <div class="row">
-      <label for="imgInput">Image</label>
-      <input id="imgInput" type="file" accept="image/*" />
-      <button id="imgClear" type="button">清除</button>
-    </div>
+        <div class="row">
+          <label for="nameInput">Name</label>
+          <input id="nameInput" placeholder="输入后保存" enterkeyhint="done" />
+          <button id="nameSave" type="button">保存</button>
+        </div>
 
-    <div class="row rowTight">
-      <label class="inline">
-        <input id="autoCrop" type="checkbox" checked />
-        自动裁剪透明边缘
-      </label>
-      <div class="mini">
-        <canvas id="customPreview" width="72" height="72"></canvas>
+        <div class="row">
+          <label for="imgInput">Image</label>
+          <input id="imgInput" type="file" accept="image/*" />
+          <button id="imgClear" type="button">清除</button>
+        </div>
+
+        <div class="row rowTight">
+          <label class="inline">
+            <input id="autoCrop" type="checkbox" checked />
+            自动裁剪透明边缘
+          </label>
+          <div class="mini">
+            <canvas id="customPreview" width="72" height="72"></canvas>
+          </div>
+        </div>
+
+        <div class="hint" id="customMeta"></div>
+      </div>
+
+      <div class="panel" id="controlsPanel">
+        <div class="panelTitle">Controls</div>
+
+        <div class="row">
+          <label for="modeSel">Mode</label>
+          <select id="modeSel"></select>
+        </div>
+
+        <div class="row">
+          <label for="targetSel">Target</label>
+          <select id="targetSel"></select>
+        </div>
+
+        <div class="row">
+          <label id="toolLabel" for="toolSel">Item</label>
+          <select id="toolSel"></select>
+        </div>
+      </div>
+
+      <div class="panel panelFooter">
+        <div class="row footerRow">
+          <button id="menuOk" type="button">完成</button>
+        </div>
       </div>
     </div>
-
-    <div class="hint" id="customMeta"></div>
   `;
-  hudLeft.appendChild(objectPanel);
+  document.body.appendChild(dock);
 
-  const nameInput = objectPanel.querySelector('#nameInput');
-  const btnSave = objectPanel.querySelector('#nameSave');
-  const imgInput = objectPanel.querySelector('#imgInput');
-  const btnClear = objectPanel.querySelector('#imgClear');
-  const autoCrop = objectPanel.querySelector('#autoCrop');
-  const preview = objectPanel.querySelector('#customPreview');
-  const metaEl = objectPanel.querySelector('#customMeta');
+  // ---------- open/close ----------
+  const btnToggle = dock.querySelector('#menuToggle');
+  const statusEl = dock.querySelector('#menuStatus');
+  const btnOk = dock.querySelector('#menuOk');
+
+  function setOpen(open) {
+    dock.classList.toggle('open', !!open);
+    overlay.style.display = open ? 'block' : 'none';
+    if (!open) {
+      // 收回时，尽量退出输入焦点（手机键盘会自动收起）
+      const ae = document.activeElement;
+      if (ae && typeof ae.blur === 'function') ae.blur();
+    }
+  }
+  function toggleOpen() {
+    setOpen(!dock.classList.contains('open'));
+  }
+
+  btnToggle.addEventListener('click', toggleOpen);
+  btnOk.addEventListener('click', () => setOpen(false));
+  overlay.addEventListener('click', () => setOpen(false));
+
+  // ---------- Object: name + upload ----------
+  const nameInput = dock.querySelector('#nameInput');
+  const btnSave = dock.querySelector('#nameSave');
+  const imgInput = dock.querySelector('#imgInput');
+  const btnClear = dock.querySelector('#imgClear');
+  const autoCrop = dock.querySelector('#autoCrop');
+  const preview = dock.querySelector('#customPreview');
+  const metaEl = dock.querySelector('#customMeta');
 
   function syncNameInput() {
     nameInput.value = state.namesByKey[state.targetKey] ?? '';
@@ -73,9 +129,10 @@ export function createUI(state, onTargetChange) {
     } else {
       state.namesByKey[state.targetKey] = txt;
     }
+    updateStatusLine();
   }
 
-  // ✅ PC：Enter；手机：blur/change + “保存”按钮
+  // ✅ PC Enter + 手机 change/blur + 保存按钮
   nameInput.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
     commitName();
@@ -116,26 +173,16 @@ export function createUI(state, onTargetChange) {
     ctx.drawImage(img, x, y, w, h);
 
     const m = state.customTarget?.meta;
-    if (m) {
-      metaEl.textContent = `已加载：${m.w}×${m.h}${m.cropped ? '（已裁剪）' : ''}`;
-    } else {
-      metaEl.textContent = `已加载：${iw}×${ih}`;
-    }
+    metaEl.textContent = m ? `已加载：${m.w}×${m.h}${m.cropped ? '（已裁剪）' : ''}` : `已加载：${iw}×${ih}`;
   }
 
   async function setCustomTargetFromFile(file) {
-    // 清理旧的
-    if (state.customTarget) {
-      state.customTarget.img = null;
-      state.customTarget.meta = null;
-    } else {
-      state.customTarget = { img: null, meta: null };
-    }
+    if (!state.customTarget) state.customTarget = { img: null, meta: null };
 
     try {
       const { img, url } = await loadImageFromFile(file);
 
-      // 先缩放到合理大小再做裁剪，避免手机超大照片爆内存
+      // 先缩放，避免手机拍照大图占用过高
       let canvas = imageToCanvasScaled(img, 2048);
 
       let cropped = false;
@@ -147,7 +194,6 @@ export function createUI(state, onTargetChange) {
         }
       }
 
-      // 释放 objectURL（我们已经转成 canvas 了）
       URL.revokeObjectURL(url);
 
       state.customTarget.img = canvas;
@@ -158,12 +204,13 @@ export function createUI(state, onTargetChange) {
         from: file.name || 'upload',
       };
 
-      // 上传即切到 custom
+      // 上传即切到 custom target
       state.targetKey = CUSTOM_TARGET_KEY;
       targetSel.value = CUSTOM_TARGET_KEY;
       syncNameInput();
       drawPreviewFromCustom();
       onTargetChange?.();
+      updateStatusLine();
     } catch (e) {
       console.warn('[ui] upload image failed', e);
       metaEl.textContent = '图片加载失败：请换一张试试（建议 PNG/JPG）';
@@ -175,9 +222,7 @@ export function createUI(state, onTargetChange) {
     const file = imgInput.files?.[0];
     if (!file) return;
     await setCustomTargetFromFile(file);
-
-    // 允许重复选择同一张文件：重置 input
-    imgInput.value = '';
+    imgInput.value = ''; // 允许重复选择同一张
   });
 
   btnClear.addEventListener('click', () => {
@@ -186,7 +231,6 @@ export function createUI(state, onTargetChange) {
       state.customTarget.meta = null;
     }
 
-    // 如果当前就在 custom，则回到第一个默认目标
     if (state.targetKey === CUSTOM_TARGET_KEY) {
       state.targetKey = TARGETS[0].key;
       targetSel.value = state.targetKey;
@@ -195,35 +239,14 @@ export function createUI(state, onTargetChange) {
     }
 
     drawPreviewFromCustom();
+    updateStatusLine();
   });
 
-  // ------------------------------
-  // Panel B: Mode / Target / Tool
-  // ------------------------------
-  const ui = document.createElement('div');
-  ui.id = 'ui';
-  ui.className = 'panel';
-  ui.innerHTML = `
-    <div class="panelTitle">Controls</div>
-    <div class="row">
-      <label for="modeSel">Mode</label>
-      <select id="modeSel"></select>
-    </div>
-    <div class="row">
-      <label for="targetSel">Target</label>
-      <select id="targetSel"></select>
-    </div>
-    <div class="row">
-      <label id="toolLabel" for="toolSel">Item</label>
-      <select id="toolSel"></select>
-    </div>
-  `;
-  hudLeft.appendChild(ui);
-
-  const modeSel = ui.querySelector('#modeSel');
-  const targetSel = ui.querySelector('#targetSel');
-  const toolSel = ui.querySelector('#toolSel');
-  const toolLabel = ui.querySelector('#toolLabel');
+  // ---------- Controls: mode/target/tool ----------
+  const modeSel = dock.querySelector('#modeSel');
+  const targetSel = dock.querySelector('#targetSel');
+  const toolSel = dock.querySelector('#toolSel');
+  const toolLabel = dock.querySelector('#toolLabel');
 
   // Mode options
   for (const m of MODES) {
@@ -236,6 +259,7 @@ export function createUI(state, onTargetChange) {
   modeSel.value = state.modeKey;
 
   // Target options（包含 custom）
+  targetSel.innerHTML = '';
   for (const t of TARGETS) {
     const opt = document.createElement('option');
     opt.value = t.key;
@@ -247,9 +271,7 @@ export function createUI(state, onTargetChange) {
   function rebuildToolMenu() {
     toolSel.innerHTML = '';
 
-    const mode = state.modeKey ?? 'punch';
-    const isHit = (mode === 'hit');
-
+    const isHit = (state.modeKey === 'hit');
     const list = isHit ? VEHICLES : WEAPONS;
     toolLabel.textContent = isHit ? 'Vehicle' : 'Item';
 
@@ -261,7 +283,6 @@ export function createUI(state, onTargetChange) {
     }
 
     if (isHit) {
-      // default
       if (!state.vehicleKey || !list.find(v => v.key === state.vehicleKey)) {
         state.vehicleKey = list[0].key;
       }
@@ -277,25 +298,35 @@ export function createUI(state, onTargetChange) {
   modeSel.addEventListener('change', () => {
     state.modeKey = modeSel.value;
     rebuildToolMenu();
+    updateStatusLine();
   });
 
   targetSel.addEventListener('change', () => {
     state.targetKey = targetSel.value;
     syncNameInput();
     onTargetChange?.();
+    updateStatusLine();
   });
 
   toolSel.addEventListener('change', () => {
-    const mode = state.modeKey ?? 'punch';
-    if (mode === 'hit') state.vehicleKey = toolSel.value;
+    if (state.modeKey === 'hit') state.vehicleKey = toolSel.value;
     else state.weaponKey = toolSel.value;
-    // ✅ 不强制 reset（避免切换就中断蓄力/动作）
+    updateStatusLine();
   });
 
-  // 初始刷新
+  function updateStatusLine() {
+    const mode = state.modeKey ?? 'punch';
+    const target = state.targetKey ?? 'sandbag';
+    const tool = (mode === 'hit') ? (state.vehicleKey ?? 'truck') : (state.weaponKey ?? 'fist');
+    statusEl.textContent = `${mode} · ${target} · ${tool}`;
+  }
+
+  // 初始
   rebuildToolMenu();
   syncNameInput();
   drawPreviewFromCustom();
+  updateStatusLine();
+  setOpen(false);
 
-  return { nameInput, modeSel, targetSel, toolSel };
+  return { modeSel, targetSel, toolSel, nameInput };
 }
