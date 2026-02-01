@@ -5,12 +5,18 @@ const withBase = (p) => {
 };
 
 export const CUSTOM_TARGET_KEY = 'custom';
+export const BOSSKEY_TARGET_KEY = 'stealth';
+
 
 export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
   { key: 'boss1',   src: withBase('assets/boss1.png'),   type: 'boss' },
   { key: 'boss2',   src: withBase('assets/boss2.png'),   type: 'boss' },
-  // custom: 仅作为上传槽 + 老板键(空格)切换用；src 为空将不会自动加载
+
+  // 老板键目标：按空格临时切换到此目标（渲染上会强制显示为“沙袋”以便隐藏）
+  { key: BOSSKEY_TARGET_KEY, src: withBase('assets/sandbag.png'), type: 'bag' },
+
+  // custom：用户上传槽；src 为空将不会自动加载（由 state.customTarget.img 提供）
   { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
 ];
 

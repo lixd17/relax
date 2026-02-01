@@ -1,10 +1,4 @@
-import {
-  CHARGE_MAX_SEC,
-  RAGE_STRENGTH01,
-  RAGE_MAX_PUNCHES,
-  RAGE_MIN_INTERVAL_SEC,
-  CUSTOM_TARGET_KEY,
-} from '../core/config.js';
+import { CHARGE_MAX_SEC, RAGE_STRENGTH01, RAGE_MAX_PUNCHES, RAGE_MIN_INTERVAL_SEC, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from '../core/config.js';
 import { clamp } from '../core/utils.js';
 
 function isTypingTarget(e) {
@@ -148,11 +142,11 @@ export function attachInput(canvas, getDpr, state, audio) {
       state.bossKey.active = false;
     } else {
       state.bossKey.prevTargetKey = state.targetKey;
-      state.targetKey = CUSTOM_TARGET_KEY;
+      state.targetKey = CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY;
       state.bossKey.active = true;
 
-      // custom 不能命名：强制清空
-      if (state.namesByKey) state.namesByKey[CUSTOM_TARGET_KEY] = '';
+      // bosskey 目标不能命名：强制清空
+      if (state.namesByKey) state.namesByKey[CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY] = '';
     }
   }
 

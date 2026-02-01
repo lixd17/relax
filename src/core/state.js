@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, VEHICLES, CUSTOM_TARGET_KEY } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
 
 export function createState() {
   return {
@@ -21,9 +21,9 @@ export function createState() {
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
     vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),
 
-    namesByKey: { [CUSTOM_TARGET_KEY]: '' },
+    namesByKey: { [CUSTOM_TARGET_KEY]: '', [BOSSKEY_TARGET_KEY]: '' },
 
-    // 老板键（空格）：临时切到 custom（显示为沙袋），再按一次可切回
+    // 老板键（空格）：临时切到 BOSSKEY_TARGET_KEY（显示为沙袋），再按一次可切回
     bossKey: {
       active: false,
       prevTargetKey: TARGETS[0].key,

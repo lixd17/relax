@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, VEHICLES, MODES, CUSTOM_TARGET_KEY } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, MODES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
 import {
   stripExt,
   loadImageFromFile,
@@ -142,9 +142,8 @@ export function createUI(state, onTargetChange) {
         <div class="helpSection">
           <div class="helpH">老板键</div>
           <ul>
-            <li><span class="kbd">Space</span>：一键切到 <b>custom</b>（伪装成“打沙袋”）；再按一次切回原目标</li>
-            <li>custom <b>不可命名</b>，避免露馅</li>
-          </ul>
+            <li><span class="kbd">Space</span>：一键伪装成“打沙袋”（沙袋图 + 无名字）；再按一次切回原目标</li>
+                      </ul>
         </div>
 
         <div class="helpSection">
@@ -248,14 +247,14 @@ export function createUI(state, onTargetChange) {
   }
 
   function syncNameInput() {
-    const isCustom = (state.targetKey === CUSTOM_TARGET_KEY);
-    if (isCustom) {
+    const isBoss = (state.targetKey === BOSSKEY_TARGET_KEY);
+    if (isBoss) {
       nameInput.value = '';
-      nameInput.placeholder = '（custom 不可命名，用于老板键）';
+      nameInput.placeholder = '（老板键目标不可命名）';
       nameInput.disabled = true;
       btnSave.disabled = true;
       // 强制清空，避免残留
-      delete state.namesByKey[CUSTOM_TARGET_KEY];
+      if (state.namesByKey) state.namesByKey[BOSSKEY_TARGET_KEY] = '';
       return;
     }
 
@@ -266,7 +265,7 @@ export function createUI(state, onTargetChange) {
   }
 
   function commitName() {
-    if (state.targetKey === CUSTOM_TARGET_KEY) return;
+    if (state.targetKey === BOSSKEY_TARGET_KEY) return;
     const txt = (nameInput.value ?? '').trim();
     if (txt.length === 0) {
       delete state.namesByKey[state.targetKey];

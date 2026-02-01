@@ -2,11 +2,8 @@ import { clamp } from '../core/utils.js';
 import { OBJECT_SCALE, FOOT_PIVOT_FRAC, TARGETS, CUSTOM_TARGET_KEY } from '../core/config.js';
 
 export function getTarget(state) {
+  // custom：用户上传槽（默认按 boss 目标处理摆动/支点）
   if (state.targetKey === CUSTOM_TARGET_KEY) {
-    // 老板键激活时：custom 伪装成沙袋（type=bag，摆动/支点也按 bag 处理）
-    if (state.bossKey?.active) {
-      return { key: CUSTOM_TARGET_KEY, type: 'bag' };
-    }
     return { key: CUSTOM_TARGET_KEY, type: 'boss' };
   }
   return TARGETS.find(t => t.key === state.targetKey) || TARGETS[0];
