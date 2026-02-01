@@ -5,6 +5,8 @@ import {
   imageToCanvasScaled,
   autoCropAlphaCanvas,
 } from './utils.js';
+import { cutoutPerson } from './cutout.js';
+import { openCropper } from './cropper.js';
 
 export function createUI(state, onTargetChange) {
   // HMR 防重复
@@ -33,7 +35,7 @@ export function createUI(state, onTargetChange) {
       <div class="panel" id="objectPanel">
         <div class="panelTitle">Object</div>
         <div class="hint">
-          建议上传<strong>仅含身体的长方形</strong>图片（初期不做抠图）。若是带透明背景的 PNG，可勾选“自动裁剪透明边缘”。
+          上传图片后会优先尝试<strong>人像抠图（Beta）</strong>；效果不好可用“手动裁剪”兜底。透明 PNG 仍可勾选“自动裁剪透明边缘”。
         </div>
 
         <div class="row">
@@ -56,6 +58,14 @@ export function createUI(state, onTargetChange) {
           <div class="mini">
             <canvas id="customPreview" width="72" height="72"></canvas>
           </div>
+        </div>
+
+        <div class="row rowTight">
+          <label class="inline">
+            <input id="autoCutout" type="checkbox" checked />
+            自动抠人像（Beta）
+          </label>
+          <button id="manualCrop" type="button">手动裁剪</button>
         </div>
 
         <div class="hint" id="customMeta"></div>
@@ -219,8 +229,21 @@ export function createUI(state, onTargetChange) {
   const imgInput = dock.querySelector('#imgInput');
   const btnClear = dock.querySelector('#imgClear');
   const autoCrop = dock.querySelector('#autoCrop');
+  const autoCutout = dock.querySelector('#autoCutout');
+  const btnManualCrop = dock.querySelector('#manualCrop');
   const preview = dock.querySelector('#customPreview');
   const metaEl = dock.querySelector('#customMeta');
+
+  let customEpoch = 0;
+
+  function setBusy(busy, msg) {
+    imgInput.disabled = busy;
+    btnClear.disabled = busy;
+    autoCrop.disabled = busy;
+    autoCutout.disabled = busy;
+    btnManualCrop.disabled = busy;
+    if (msg != null) metaEl.textContent = msg;
+  }
 
   function syncNameInput() {
     const isCustom = (state.targetKey === CUSTOM_TARGET_KEY);
@@ -292,17 +315,48 @@ export function createUI(state, onTargetChange) {
     ctx.drawImage(img, x, y, w, h);
 
     const m = state.customTarget?.meta;
-    metaEl.textContent = m ? `已加载：${m.w}×${m.h}${m.cropped ? '（已裁剪）' : ''}` : `已加载：${iw}×${ih}`;
+    if (m) {
+      const tags = [m.cutout ? '抠图' : null, m.cropped ? '裁剪' : null].filter(Boolean).join(' / ');
+      metaEl.textContent = `已加载：${m.w}×${m.h}${tags ? `（${tags}）` : ''}`;
+    } else {
+      metaEl.textContent = `已加载：${iw}×${ih}`;
+    }
   }
 
   async function setCustomTargetFromFile(file) {
-    if (!state.customTarget) state.customTarget = { img: null, meta: null };
+    if (!state.customTarget) state.customTarget = { src: null, img: null, meta: null };
+    const epoch = ++customEpoch;
+    setBusy(true, '处理中...');
 
     try {
       const { img, url } = await loadImageFromFile(file);
 
+      if (epoch !== customEpoch) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       // 先缩放，避免手机拍照大图占用过高
-      let canvas = imageToCanvasScaled(img, 2048);
+      const srcCanvas = imageToCanvasScaled(img, 2048);
+      state.customTarget.src = srcCanvas;
+      let canvas = srcCanvas;
+
+      // 先做人像抠图（Beta），失败就保留原图（再靠手动裁剪兜底）
+      let cutout = false;
+      if (autoCutout.checked) {
+        metaEl.textContent = '人像抠图中...（首次会加载模型）';
+        const out = await cutoutPerson(canvas);
+        if (epoch !== customEpoch) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        if (out) {
+          canvas = out;
+          cutout = true;
+        } else {
+          metaEl.textContent = '未检测到人像或抠图失败（可用手动裁剪兜底）';
+        }
+      }
 
       let cropped = false;
       if (autoCrop.checked) {
@@ -320,6 +374,7 @@ export function createUI(state, onTargetChange) {
         w: canvas.width,
         h: canvas.height,
         cropped,
+        cutout,
         from: file.name || 'upload',
       };
 
@@ -330,11 +385,70 @@ export function createUI(state, onTargetChange) {
       drawPreviewFromCustom();
       onTargetChange?.();
       updateStatusLine();
+      setBusy(false);
     } catch (e) {
       console.warn('[ui] upload image failed', e);
       metaEl.textContent = '图片加载失败：请换一张试试（建议 PNG/JPG）';
       drawPreviewFromCustom();
+      setBusy(false);
     }
+  }
+
+  async function runManualCrop() {
+    const src = state.customTarget?.src || state.customTarget?.img;
+    if (!src) {
+      metaEl.textContent = '还没有上传图片。';
+      return;
+    }
+
+    const epoch = ++customEpoch;
+    setBusy(true, '打开裁剪器...');
+
+    const ret = await openCropper(src, { title: '手动裁剪（兜底）' });
+    if (epoch !== customEpoch) return;
+    if (!ret || !ret.canvas) {
+      setBusy(false);
+      return;
+    }
+
+    // 裁剪后的图作为新的 src
+    state.customTarget.src = ret.canvas;
+    let canvas = ret.canvas;
+
+    // 裁剪后可再次尝试抠人像
+    let cutout = false;
+    if (autoCutout.checked) {
+      metaEl.textContent = '裁剪完成，正在抠人像...';
+      const out = await cutoutPerson(canvas);
+      if (epoch !== customEpoch) return;
+      if (out) {
+        canvas = out;
+        cutout = true;
+      }
+    }
+
+    let cropped = false;
+    if (autoCrop.checked) {
+      const out2 = autoCropAlphaCanvas(canvas, 10, 6);
+      if (out2 !== canvas) {
+        canvas = out2;
+        cropped = true;
+      }
+    }
+
+    state.customTarget.img = canvas;
+    state.customTarget.meta = {
+      w: canvas.width,
+      h: canvas.height,
+      cropped,
+      cutout,
+      from: 'manual crop',
+    };
+
+    // 手动裁剪不自动切 target（避免老板键场景误触），但如果当前就是 custom，就更新预览
+    drawPreviewFromCustom();
+    updateStatusLine();
+    setBusy(false);
   }
 
   imgInput.addEventListener('change', async () => {
@@ -346,6 +460,7 @@ export function createUI(state, onTargetChange) {
 
   btnClear.addEventListener('click', () => {
     if (state.customTarget) {
+      state.customTarget.src = null;
       state.customTarget.img = null;
       state.customTarget.meta = null;
     }
@@ -359,6 +474,10 @@ export function createUI(state, onTargetChange) {
 
     drawPreviewFromCustom();
     updateStatusLine();
+  });
+
+  btnManualCrop.addEventListener('click', () => {
+    runManualCrop();
   });
 
   // ---------- Controls: mode/target/tool ----------
