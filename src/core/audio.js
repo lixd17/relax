@@ -31,6 +31,12 @@ export function createHitAudio() {
   let chargeBuf = null;
   let loopBuf = null;
 
+  // 防止 startCharge() 的异步加载与 stopCharge() 发生竞态：
+  // 如果用户很快松手/切换模式，startCharge 可能在 await 之后“复活”并开始播放，
+  // 从而出现“什么都不操作也一直循环”的情况。
+  // 用 epoch 让任何 stop 都能取消尚未完成的 start。
+  let chargeEpoch = 0;
+
   // 两路播放：完整一次 + 尾段循环
   let fullSrc = null;
   let fullGain = null;
@@ -61,7 +67,7 @@ export function createHitAudio() {
     return chargeBuf;
   }
 
-  function stopCharge() {
+  function stopChargeSources() {
     if (!ac) return;
     const t = ac.currentTime;
 
@@ -89,11 +95,22 @@ export function createHitAudio() {
     loopSrc = null; loopGain = null;
   }
 
+  function stopCharge() {
+    // 任何 stop 都会使正在 await 的 startCharge 失效
+    chargeEpoch++;
+    stopChargeSources();
+  }
+
   async function startCharge() {
-    stopCharge();
+    // 进入新的 epoch：取消之前的 pending start，并停掉已在播的
+    const myEpoch = ++chargeEpoch;
+    stopChargeSources();
 
     const ctx = ensureAudioContext();
     try { await ctx.resume(); } catch {}
+
+    // 如果用户很快松手/切换模式，await 期间可能已经 stop 了
+    if (myEpoch !== chargeEpoch) return;
 
     let buf;
     try {
@@ -101,6 +118,9 @@ export function createHitAudio() {
     } catch {
       return;
     }
+
+    // 再次检查：避免加载完成后“复活”播放
+    if (myEpoch !== chargeEpoch) return;
 
     // full: 播放整个 music2 一次（慢放）
     fullSrc = ctx.createBufferSource();
