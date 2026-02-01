@@ -9,41 +9,24 @@ export function createState() {
 
     interacted: false,
 
-    // ✅ Mode
     modeKey: 'punch',
-
-    // ✅ 目标
     targetKey: TARGETS[0].key,
 
-    // ✅ 自定义目标（上传图片后注入）
-    customTarget: {
-      img: null,   // HTMLCanvasElement | HTMLImageElement | null
-      meta: null,
-    },
+    customTarget: { img: null, meta: null },
 
-    // ✅ punch 模式：道具
     weaponKey: (WEAPONS.find(w => w.key === 'fist')?.key) ?? WEAPONS[0].key,
-
-    // ✅ hit 模式：车辆
     vehicleKey: (VEHICLES.find(v => v.key === 'truck')?.key) ?? (VEHICLES[0]?.key ?? 'truck'),
 
-    // ✅ 每个目标自己的名字（包含 custom）
-    namesByKey: {
-      [CUSTOM_TARGET_KEY]: '',
-    },
+    namesByKey: { [CUSTOM_TARGET_KEY]: '' },
 
-    // --------------------
-    // 输入与蓄力
-    // --------------------
     charge: {
       active: false,
       side: +1,
       t0: 0,
-      sec: 0,     // 0..3 clamp（用于速度/强度）
-      rawSec: 0,  // 真实按住时长（仅用于少数用途）
+      sec: 0,
+      rawSec: 0,
     },
 
-    // punch 动画（punch 模式用）
     punch: {
       active: false,
       phase: 'idle',
@@ -54,11 +37,6 @@ export function createState() {
       over: false,
     },
 
-    // --------------------
-    // 目标特效状态
-    // --------------------
-
-    // ✅ 原 fly（旋转飞出 + 缩小）
     fly: {
       active: false,
       x: 0, y: 0,
@@ -68,68 +46,58 @@ export function createState() {
       scale: 1,
     },
 
-    // ✅ truck/car 抛物线撞飞
+    // truck/car throw
     throwFx: {
       active: false,
       grounded: false,
       t: 0,
       T: 0,
-      x: 0, y: 0,         // 相对中心偏移
+      x: 0, y: 0,
       vx: 0, vy: 0,
       g: 0,
       dxLand: 0, dyLand: 0,
       ang: 0,
       angVel: 0,
       crushed: false,
+      side: -1,
     },
 
-    // ✅ roller 压扁：躺下 + 变扁（progress 0..1）
+    // ✅ roller: 先躺下再横向压扁（分离 rot / squash）
     flattenFx: {
       active: false,
-      phase: 'down', // down/hold/up
+      phase: 'down',     // down -> squash -> hold -> up
       t: 0,
-      prog: 0,
+      rot01: 0,          // 0..1 (0站立 -> 1躺下)
+      squash01: 0,       // 0..1 (0正常 -> 1压扁)
     },
 
-    // ✅ rocket 螺旋升天（带着对象）
+    // rocket: simplified quadratic
     rocketFx: {
       active: false,
-      t: 0,
-      baseX: 0,
-      baseY: 0,
+      side: -1,
       x: 0,
       y: 0,
       vx: 0,
       vy: 0,
-      phi: 0,
-      amp: 0,
-      strength01: 0,
+      ay: 0,
     },
 
-    // ✅ rocket 爆炸
-    explosion: {
-      active: false,
-      t: 0,
-      x: 0,
-      y: 0,
-    },
-
-    // ✅ 车辆本体运动（hit 模式核心）
+    // vehicle act (hit)
     vehicleAct: {
       active: false,
       pendingInit: false,
       key: 'truck',
+      side: -1,
+
       chargeSec: 0,
       strength01: 0,
 
       hitDone: false,
 
-      // 车辆中心位置（canvas 坐标）
       x: 0,
       y: 0,
       vx: 0,
 
-      // 用于碰撞/出屏
       w: 0,
       h: 0,
     },

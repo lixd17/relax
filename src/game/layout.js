@@ -26,9 +26,14 @@ export function computeLayout(canvas, targetImg, state) {
   const cx = W * 0.5;
   const cy = H * 0.58;
 
+  // ✅ punch/fist 起点（保持旧：1/4 & 3/4）
   const startXL = W * 0.25;
   const startXR = W * 0.75;
   const startY = cy - objH * 0.10;
+
+  // ✅ vehicle 起点（新：1/6 & 5/6）
+  const vehicleStartXL = W * (1 / 6);
+  const vehicleStartXR = W * (5 / 6);
 
   const tgt = getTarget(state);
   let pivotX = cx;
@@ -46,5 +51,6 @@ export function computeLayout(canvas, targetImg, state) {
     cx, cy,
     pivotX, pivotY,
     startXL, startXR, startY,
+    vehicleStartXL, vehicleStartXR,
   };
 }
