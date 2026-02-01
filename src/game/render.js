@@ -39,11 +39,6 @@ function renderHitMode(ctx, L, state, imgs, targetImg, nowMs, getDpr) {
   const act = state.vehicleAct;
   const charging = !!state.charge?.active;
 
-  if (state.rocketFx?.active) {
-    drawTarget(ctx, L, state, targetImg);
-    drawRocketFx(ctx, L, state, imgs);
-    return;
-  }
 
   const hasVehicle = !!act?.active;
 
@@ -80,12 +75,11 @@ function drawVehicleChargePreview(ctx, L, state, imgs, nowMs, getDpr) {
   const x = (side < 0) ? (startX - w * 0.52) : (startX + w * 0.52);
 
   const charge01 = clamp((state.charge?.sec ?? 0) / CHARGE_MAX_SEC, 0, 1);
-  drawChargeFXAt(ctx, x, y, w, charge01, nowMs);
 
   ctx.save();
   ctx.translate(x, y);
 
-  if (side > 0) ctx.scale(-1, 1);
+  if (side < 0) ctx.scale(-1, 1);
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
 
   ctx.restore();
@@ -106,40 +100,23 @@ function drawVehicleAct(ctx, L, state, imgs, nowMs) {
   const y = act.y;
 
   const charge01 = clamp((act.chargeSec ?? 0) / CHARGE_MAX_SEC, 0, 1);
-  drawChargeFXAt(ctx, x, y, w, charge01 * 0.55, nowMs);
 
   ctx.save();
   ctx.translate(x, y);
 
-  if (act.vx < 0) ctx.scale(-1, 1);
+  if (act.vx > 0) ctx.scale(-1, 1);
   ctx.drawImage(img, -w / 2, -h / 2, w, h);
 
   ctx.restore();
 }
 
-function drawRocketFx(ctx, L, state, imgs) {
-  const fx = state.rocketFx;
-  const img = imgs.vehicles?.get('rocket') ?? imgs.fist;
-  const { w, h } = getVehicleWH(L, 'rocket', img);
-
-  const dir = (fx.vx >= 0) ? +1 : -1;
-  const x = fx.x + dir * (w * 0.38);
-  const y = fx.y;
-
-  ctx.save();
-  ctx.translate(x, y);
-  if (dir < 0) ctx.scale(-1, 1);
-  ctx.drawImage(img, -w / 2, -h / 2, w, h);
-  ctx.restore();
-}
 
 function getVehicleWH(L, key, img) {
   const minDim = L.minDim;
   const sizeFactor =
     key === 'truck' ? 2.35 :
     key === 'car' ? 2.10 :
-    key === 'roller' ? 2.25 :
-    key === 'rocket' ? 2.20 : 2.20;
+    key === 'roller' ? 2.25 : 2.20;
 
   const baseW = minDim * FIST_SIZE_FACTOR * sizeFactor * VEHICLE_SIZE_SCALE;
 
@@ -172,19 +149,13 @@ function drawBackground(ctx, L) {
 function drawTarget(ctx, L, state, targetImg) {
   const { objW, objH, cx, cy, pivotX, pivotY, minDim } = L;
   const tgt = getTarget(state);
-
-  const isRocket = !!state.rocketFx?.active;
   const isFly = !!state.fly?.active;
   const isThrow = !!state.throwFx?.active;
   const isFlatten = !!state.flattenFx?.active;
 
   let dx = 0, dy = 0, ang = 0, sc = 1;
 
-  if (isRocket) {
-    const fx = state.rocketFx;
-    dx = fx.x - cx;
-    dy = fx.y - cy;
-  } else if (isFly) {
+  if (isFly) {
     const fly = state.fly;
     dx = fly.x;
     dy = fly.y;
@@ -201,7 +172,7 @@ function drawTarget(ctx, L, state, targetImg) {
   const cx2 = cx + dx;
   const cy2 = cy + dy;
 
-  const special = isFly || isThrow || isRocket;
+  const special = isFly || isThrow;
   const s = special ? 0 : clamp(state.squash, 0, 1);
 
   const squashK = (tgt.type === 'boss') ? 0.06 : 0.10;
@@ -222,7 +193,7 @@ function drawTarget(ctx, L, state, targetImg) {
     ctx.translate(-pivotX, -pivotY);
   }
 
-  // ✅ roller：先躺下（旋转），再“横向压扁”（屏幕 x 方向）
+  // ✅ roller：先躺下（旋转），再“纵向压扁”（屏幕 y 方向）
   if (isFlatten) {
     const fx = state.flattenFx;
 
@@ -231,11 +202,11 @@ function drawTarget(ctx, L, state, targetImg) {
 
     const rot = lerp(0, Math.PI / 2, rot01);
 
-    // 横向压扁：压缩屏幕 x（scaleX），并略增厚 y
-    const sx = lerp(1.0, 0.18, sq01);
-    const sy = lerp(1.0, 1.10, sq01);
+    // 纵向压扁：压缩屏幕 y（scaleY），并略增厚 x
+    const sx = lerp(1.0, 1.10, sq01);
+    const sy = lerp(1.0, 0.18, sq01);
 
-    // 关键：先做“全局横向缩放”，再旋转 -> 视觉上就是躺下后横向压扁
+    // 关键：缩放在旋转之后生效（屏幕坐标系），保持“向地面压扁”的方向感
     ctx.translate(cx2, cy2);
     ctx.scale(sx, sy);
     ctx.rotate(rot);

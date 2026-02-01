@@ -5,7 +5,6 @@ export function attachInput(canvas, getDpr, state, audio) {
   function isBusy() {
     if (state.fly?.active) return true;
     if (state.vehicleAct?.active) return true;
-    if (state.rocketFx?.active) return true;
     return false;
   }
 
@@ -43,6 +42,7 @@ export function attachInput(canvas, getDpr, state, audio) {
       state.vehicleAct.active = true;
       state.vehicleAct.pendingInit = true;
       state.vehicleAct.key = state.vehicleKey ?? 'truck';
+      state.vehicleAct.side = side;
       state.vehicleAct.chargeSec = sec;
       state.vehicleAct.strength01 = clamp(sec / CHARGE_MAX_SEC, 0, 1);
 
@@ -58,8 +58,6 @@ export function attachInput(canvas, getDpr, state, audio) {
       // 清理旧特效（避免叠加）
       state.throwFx.active = false;
       state.flattenFx.active = false;
-      state.rocketFx.active = false;
-      state.explosion.active = false;
 
       return;
     }

@@ -71,17 +71,6 @@ export function createState() {
       squash01: 0,       // 0..1 (0正常 -> 1压扁)
     },
 
-    // rocket: simplified quadratic
-    rocketFx: {
-      active: false,
-      side: -1,
-      x: 0,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      ay: 0,
-    },
-
     // vehicle act (hit)
     vehicleAct: {
       active: false,

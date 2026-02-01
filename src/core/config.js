@@ -29,7 +29,6 @@ export const VEHICLES = [
   { key: 'truck',  src: withBase('assets/truck.png') },
   { key: 'car',    src: withBase('assets/car.png') },
   { key: 'roller', src: withBase('assets/roller.png') },
-  { key: 'rocket', src: withBase('assets/rocket.png') },
 ];
 
 export const ASSET = {
@@ -70,5 +69,3 @@ export const VEHICLE_SPEED_MAX = 3.00;
 export const VEHICLE_LAND_MARGIN_FRAC = 0.12;
 export const VEHICLE_THROW_GRAV = 3.4;
 
-// rocket simplified quadratic curve
-export const ROCKET_CURVE_AY = 1.35;

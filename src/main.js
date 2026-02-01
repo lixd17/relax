@@ -43,8 +43,6 @@ async function main() {
     state.vehicleAct.active = false;
     state.throwFx.active = false;
     state.flattenFx.active = false;
-    state.rocketFx.active = false;
-    state.explosion.active = false;
 
     // 复位 fly
     if (state.fly) {
