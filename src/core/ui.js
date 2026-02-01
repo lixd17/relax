@@ -10,6 +10,7 @@ export function createUI(state, onTargetChange) {
   // HMR 防重复
   document.getElementById('menuDock')?.remove();
   document.getElementById('menuOverlay')?.remove();
+  document.getElementById('helpModal')?.remove();
 
   // 半透明遮罩（打开菜单时启用；点空白处收回）
   const overlay = document.createElement('div');
@@ -24,6 +25,7 @@ export function createUI(state, onTargetChange) {
     <div id="menuHeader">
       <button id="menuToggle" type="button" aria-label="menu">☰</button>
       <div id="menuTitle">Menu</div>
+      <button id="helpToggle" type="button" aria-label="help">help</button>
       <div id="menuStatus"></div>
     </div>
 
@@ -87,27 +89,129 @@ export function createUI(state, onTargetChange) {
   `;
   document.body.appendChild(dock);
 
+  // Help modal（常驻在左上角；点击 help 打开）
+  const helpModal = document.createElement('div');
+  helpModal.id = 'helpModal';
+  helpModal.style.display = 'none';
+  helpModal.innerHTML = `
+    <div class="helpCard" role="dialog" aria-modal="true" aria-label="Help">
+      <div class="helpHeader">
+        <div class="helpTitle">Help</div>
+        <button id="helpClose" type="button" aria-label="close">✕</button>
+      </div>
+
+      <div class="helpBody">
+        <div class="helpSection">
+          <div class="helpH">快速开始</div>
+          <ul>
+            <li><b>打开菜单</b>：左上角 ☰</li>
+            <li><b>punch</b>：按住鼠标/触屏蓄力 → 松开出拳</li>
+            <li><b>hit</b>：按住蓄力 → 松开出车（从左右冲出来）</li>
+            <li><b>rage</b>：无蓄力；鼠标点击或键盘字母键（A–Z）都能连续出拳</li>
+          </ul>
+        </div>
+
+        <div class="helpSection">
+          <div class="helpH">模式说明</div>
+          <ul>
+            <li><b>punch</b>：蓄力越久越狠（最多 3 秒），超时会触发“过载”判定</li>
+            <li><b>hit</b>：蓄力影响车辆速度/力度；短蓄力更像“撞飞”，长蓄力更像“直接飞出去”</li>
+            <li><b>rage</b>：每次点击/每次字母输入都会生成一个新的攻击（可同屏多拳）</li>
+          </ul>
+        </div>
+
+        <div class="helpSection">
+          <div class="helpH">输入规则</div>
+          <ul>
+            <li><b>鼠标/触屏</b>：点左边从左出，点右边从右出（和拳头一致）</li>
+            <li><b>键盘字母键（A–Z）</b>：仅在 rage 中有效；左右随机一边出拳</li>
+            <li><b>输入法提示</b>：浏览器无法强制切换系统输入法；想爽打建议切到英文输入</li>
+          </ul>
+        </div>
+
+        <div class="helpSection">
+          <div class="helpH">老板键</div>
+          <ul>
+            <li><span class="kbd">Space</span>：一键切到 <b>custom</b>（伪装成“打沙袋”）；再按一次切回原目标</li>
+            <li>custom <b>不可命名</b>，避免露馅</li>
+          </ul>
+        </div>
+
+        <div class="helpSection">
+          <div class="helpH">小技巧</div>
+          <ul>
+            <li>菜单里的 <b>Object</b> 可以上传自定义图片；透明 PNG 可勾选“自动裁剪”</li>
+            <li><span class="kbd">Esc</span>：关闭 Help（也可点空白处关闭）</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(helpModal);
+
+
   // ---------- open/close ----------
   const btnToggle = dock.querySelector('#menuToggle');
+  const btnHelp = dock.querySelector('#helpToggle');
   const statusEl = dock.querySelector('#menuStatus');
   const btnOk = dock.querySelector('#menuOk');
+  const btnHelpClose = helpModal.querySelector('#helpClose');
+
+  let helpOpen = false;
+
+  function syncOverlay() {
+    overlay.style.display = (dock.classList.contains('open') || helpOpen) ? 'block' : 'none';
+  }
+
+  function blurActive() {
+    const ae = document.activeElement;
+    if (ae && typeof ae.blur === 'function') ae.blur();
+  }
 
   function setOpen(open) {
     dock.classList.toggle('open', !!open);
-    overlay.style.display = open ? 'block' : 'none';
-    if (!open) {
-      // 收回时，尽量退出输入焦点（手机键盘会自动收起）
-      const ae = document.activeElement;
-      if (ae && typeof ae.blur === 'function') ae.blur();
-    }
+    syncOverlay();
+    if (!open) blurActive();
   }
   function toggleOpen() {
     setOpen(!dock.classList.contains('open'));
   }
 
+  function setHelpOpen(open) {
+    helpOpen = !!open;
+    helpModal.style.display = helpOpen ? 'block' : 'none';
+    if (helpOpen) dock.classList.remove('open');
+    syncOverlay();
+    if (!helpOpen) blurActive();
+  }
+  function toggleHelp() {
+    setHelpOpen(!helpOpen);
+  }
+
   btnToggle.addEventListener('click', toggleOpen);
+  btnHelp.addEventListener('click', toggleHelp);
   btnOk.addEventListener('click', () => setOpen(false));
-  overlay.addEventListener('click', () => setOpen(false));
+  btnHelpClose.addEventListener('click', () => setHelpOpen(false));
+
+  // 点空白处：同时收回菜单 + help
+  overlay.addEventListener('click', () => {
+    setOpen(false);
+    setHelpOpen(false);
+  });
+
+  // 点 help 卡片外部也关闭
+  helpModal.addEventListener('click', (e) => {
+    if (e.target === helpModal) setHelpOpen(false);
+  });
+
+  // HMR 下避免重复绑定全局 ESC
+  if (window.__relaxHelpKeyHandler) {
+    window.removeEventListener('keydown', window.__relaxHelpKeyHandler);
+  }
+  window.__relaxHelpKeyHandler = (e) => {
+    if (e.key === 'Escape' && helpOpen) setHelpOpen(false);
+  };
+  window.addEventListener('keydown', window.__relaxHelpKeyHandler);
 
   // ---------- Object: name + upload ----------
   const nameInput = dock.querySelector('#nameInput');

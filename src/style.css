@@ -216,3 +216,112 @@ canvas {
     padding: 6px 8px;
   }
 }
+
+
+/* Help button (menu header) */
+#helpToggle {
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(60,90,120,0.35);
+  color: rgba(255,255,255,0.90);
+  font-size: 12px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+#helpToggle:active { transform: translateY(1px); }
+
+/* Help modal */
+#helpModal {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  display: none;
+}
+
+.helpCard {
+  position: fixed;
+  top: calc(10px + var(--safe-top));
+  left: calc(10px + var(--safe-left));
+  width: min(92vw, 420px);
+  max-height: min(78vh, 720px);
+  overflow: auto;
+
+  border-radius: 12px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.14);
+  padding: 12px 12px;
+}
+
+.helpHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.helpTitle {
+  color: rgba(255,255,255,0.92);
+  font-family: sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+#helpClose {
+  margin-left: auto;
+  width: 34px;
+  height: 30px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(60,90,120,0.35);
+  color: rgba(255,255,255,0.92);
+  cursor: pointer;
+}
+
+#helpClose:active { transform: translateY(1px); }
+
+.helpBody {
+  color: rgba(255,255,255,0.80);
+  font-family: sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.helpSection {
+  border-top: 1px solid rgba(255,255,255,0.10);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.helpSection:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.helpH {
+  color: rgba(255,255,255,0.92);
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
+.helpBody ul {
+  margin: 0 0 0 18px;
+  padding: 0;
+}
+
+.helpBody li { margin: 6px 0; }
+
+.kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(20,30,40,0.70);
+  color: rgba(255,255,255,0.92);
+  font-size: 11px;
+}
