@@ -142,11 +142,12 @@ export function attachInput(canvas, getDpr, state, audio) {
       state.bossKey.active = false;
     } else {
       state.bossKey.prevTargetKey = state.targetKey;
-      state.targetKey = CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY;
+      // IMPORTANT: do NOT use comma operator here; we want the boss-key target key.
+      state.targetKey = BOSSKEY_TARGET_KEY;
       state.bossKey.active = true;
 
       // bosskey 目标不能命名：强制清空
-      if (state.namesByKey) state.namesByKey[CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY] = '';
+      if (state.namesByKey) state.namesByKey[BOSSKEY_TARGET_KEY] = '';
     }
   }
 
