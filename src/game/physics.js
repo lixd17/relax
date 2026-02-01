@@ -141,7 +141,7 @@ function stepVehicleAct(state, dt, audio, L) {
       }
 
       if (act.key === 'roller') {
-        startFlattenFx(state);
+        startFlattenFx(state, act.side);
         state.squash = 1.0;
         state.flash = 1.0;
       }
@@ -264,7 +264,9 @@ function startThrowFx(state, side, chargeSec, strength01, L) {
   fx.y = 0;
 
   fx.ang = 0;
-  fx.angVel = lerp(2.0, 7.0, tCurve) * (0.7 + 0.6 * strength01);
+  const rotSign = -side; // mirror rotation for left/right hits
+
+  fx.angVel = rotSign * lerp(2.0, 7.0, tCurve) * (0.7 + 0.6 * strength01);
 
   fx.crushed = false;
 
@@ -299,7 +301,7 @@ function stepThrowFx(state, dt, L) {
 // ---------------------------
 // ✅ flattenFx (roller): down -> squash -> hold -> up
 // ---------------------------
-function startFlattenFx(state) {
+function startFlattenFx(state, side) {
   const fx = state.flattenFx;
   fx.active = true;
   fx.phase = 'down';
@@ -307,7 +309,9 @@ function startFlattenFx(state) {
   fx.rot01 = 0;
   fx.squash01 = 0;
 
-  state.theta = 0;
+  
+  fx.side = (side ?? -1);
+state.theta = 0;
   state.omega = 0;
 }
 

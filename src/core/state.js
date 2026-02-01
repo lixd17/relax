@@ -67,6 +67,7 @@ export function createState() {
       active: false,
       phase: 'down',     // down -> squash -> hold -> up
       t: 0,
+      side: -1,          // -1:left hit, +1:right hit
       rot01: 0,          // 0..1 (0站立 -> 1躺下)
       squash01: 0,       // 0..1 (0正常 -> 1压扁)
     },

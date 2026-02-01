@@ -200,7 +200,9 @@ function drawTarget(ctx, L, state, targetImg) {
     const rot01 = clamp(fx.rot01 ?? 0, 0, 1);
     const sq01  = clamp(fx.squash01 ?? 0, 0, 1);
 
-    const rot = lerp(0, Math.PI / 2, rot01);
+    const side = (fx.side ?? state.vehicleAct?.side ?? -1);
+    const rotDir = (side < 0) ? +1 : -1;
+    const rot = lerp(0, rotDir * Math.PI / 2, rot01);
 
     // 纵向压扁：压缩屏幕 y（scaleY），并略增厚 x
     const sx = lerp(1.0, 1.10, sq01);
