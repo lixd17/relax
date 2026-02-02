@@ -16,6 +16,7 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
 
   if (mode === 'hit') {
     renderHitMode(ctx, L, state, imgs, targetImg, nowMs, getDpr);
+    drawImpactFx(ctx, L, state, "particles");
     drawHint(ctx, L, state);
     return;
   }
@@ -23,6 +24,7 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
   if (mode === 'rage') {
     drawTarget(ctx, L, state, targetImg);
     renderRageMode(ctx, L, state, imgs, nowMs);
+    drawImpactFx(ctx, L, state, "particles");
     drawHint(ctx, L, state);
     return;
   }
@@ -31,6 +33,8 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
 
   const pose = getWeaponPose(L, state, imgs, nowMs);
   drawWeaponAndFX(ctx, L, state, pose, nowMs, getDpr);
+
+  drawImpactFx(ctx, L, state, "particles");
 
   drawHint(ctx, L, state);
 }
@@ -66,7 +70,6 @@ function renderRageMode(ctx, L, state, imgs, nowMs) {
 function renderHitMode(ctx, L, state, imgs, targetImg, nowMs, getDpr) {
   const act = state.vehicleAct;
   const charging = !!state.charge?.active;
-
 
   const hasVehicle = !!act?.active;
 
@@ -138,7 +141,6 @@ function drawVehicleAct(ctx, L, state, imgs, nowMs) {
   ctx.restore();
 }
 
-
 function getVehicleWH(L, key, img) {
   const minDim = L.minDim;
   const sizeFactor =
@@ -180,6 +182,7 @@ function drawTarget(ctx, L, state, targetImg) {
   const isFly = !!state.fly?.active;
   const isThrow = !!state.throwFx?.active;
   const isFlatten = !!state.flattenFx?.active;
+  const special = isFly || isThrow;
 
   let dx = 0, dy = 0, ang = 0, sc = 1;
 
@@ -200,7 +203,7 @@ function drawTarget(ctx, L, state, targetImg) {
   const cx2 = cx + dx;
   const cy2 = cy + dy;
 
-  const special = isFly || isThrow;
+  drawImpactFx(ctx, L, state, "shadow", cx2, cy2, objW, objH, special);
   const s = special ? 0 : clamp(state.squash, 0, 1);
 
   const squashK = (tgt.type === 'boss') ? 0.06 : 0.10;
@@ -262,6 +265,8 @@ function drawTarget(ctx, L, state, targetImg) {
   const y = cy2 - objH / 2;
 
   if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
+
+  drawImpactFx(ctx, L, state, "decal", cx2, cy2, objW, objH, special);
 
   if (state.flash > 0.02) {
     ctx.save();
@@ -567,5 +572,131 @@ function drawHint(ctx, L, state) {
     ? '狂暴：鼠标点击或按任意字母键连击；空格=老板键'
     : '按住蓄力，松开攻击；左上角 Menu 可展开设置；空格=老板键';
   ctx.fillText(msg, L.W * 0.5, L.H * 0.18);
+  ctx.restore();
+}
+
+// ---------------------------
+// impact FX render (shared)
+// 3) contact shadow compression
+// 4) dent decal (on target)
+// 6) particles
+// ---------------------------
+function drawImpactFx(ctx, L, state, phase, cx2, cy2, objW, objH, special) {
+  if (phase === "shadow") {
+    return drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special);
+  }
+  if (phase === "decal") {
+    return drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH);
+  }
+  if (phase === "particles") {
+    return drawImpactParticles(ctx, L, state);
+  }
+}
+
+function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
+  const fx = state.fxImpact;
+  if (!fx || !fx.shadow || fx.shadow <= 0) return;
+  if (special) return; // no ground shadow while flying / in-air throw
+
+  const p = clamp(fx.shadow, 0, 1);
+  const side = fx.shadowSide ?? -1;
+
+  // baseline shadow under target
+  const x = cx2 + side * objW * 0.05 * p;
+  const y = cy2 + objH * 0.53;
+
+  const baseW = objW * 0.34;
+  const baseH = objH * 0.085;
+
+  const w = baseW * (1 + 0.55 * p);
+  const h = Math.max(2, baseH * (1 - 0.70 * p));
+
+  ctx.save();
+  ctx.globalAlpha = 0.10 + 0.22 * p;
+
+  // soft edge
+  const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.55);
+  g.addColorStop(0, 'rgba(0,0,0,0.85)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+
+  ctx.beginPath();
+  ctx.ellipse(x, y, w * 0.5, h * 0.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH) {
+  const fx = state.fxImpact;
+  if (!fx || !Array.isArray(fx.decals) || fx.decals.length === 0) return;
+
+  const minR = Math.min(objW, objH);
+
+  ctx.save();
+  // keep decals on the target body
+  ctx.beginPath();
+  ctx.rect(cx2 - objW / 2, cy2 - objH / 2, objW, objH);
+  ctx.clip();
+
+  for (const d of fx.decals) {
+    const t = clamp((d.age ?? 0) / Math.max(1e-6, (d.life ?? 1)), 0, 1);
+    const fade = 1 - t;
+    const a = 0.22 * fade;
+    if (a <= 0.002) continue;
+
+    const r = clamp(d.r01 ?? 0.08, 0.03, 0.20) * minR;
+    const x = cx2 + clamp(d.u ?? 0, -0.48, 0.48) * objW;
+    const y = cy2 + clamp(d.v ?? 0, -0.48, 0.48) * objH;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(d.rot ?? 0);
+
+    // slight ellipse makes it look like a dent instead of a perfect sticker
+    ctx.scale(1.25, 0.88);
+
+    // dark center fade
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, `rgba(0,0,0,${0.35 * a})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+
+    // subtle rim highlight
+    ctx.strokeStyle = `rgba(255,255,255,${0.18 * a})`;
+    ctx.lineWidth = Math.max(1, r * 0.18);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.72, 0, TAU);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawImpactParticles(ctx, L, state) {
+  const fx = state.fxImpact;
+  if (!fx || !Array.isArray(fx.parts) || fx.parts.length === 0) return;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,1)';
+
+  for (const p of fx.parts) {
+    const t = clamp((p.age ?? 0) / Math.max(1e-6, (p.life ?? 1)), 0, 1);
+    const fade = 1 - t;
+    const a = fade * clamp(p.a ?? 0.7, 0, 1);
+    if (a <= 0.01) continue;
+
+    const r = Math.max(0.8, p.r ?? 2);
+
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.arc(p.x ?? 0, p.y ?? 0, r, 0, TAU);
+    ctx.fill();
+  }
+
   ctx.restore();
 }

@@ -48,6 +48,9 @@ export function updatePhysics(state, dt, audio, L) {
   state.squash *= Math.exp(-10.0 * dt);
   state.flash *= Math.exp(-12.0 * dt);
 
+  // impact fx (decals/particles/shadow)
+  stepImpactFx(state, dt);
+
   // punch animation (punch mode only)
   const p = state.punch;
   if (p && p.active && (state.modeKey ?? 'punch') === 'punch') {
@@ -124,6 +127,8 @@ function stepRagePunches(state, dt, audio, L) {
 function applyPunchHit(state, side, strength01, isOverCharge, audio, L) {
   audio?.playOnce?.();
 
+  if (L) triggerImpactFx(state, side, strength01, L, "punch");
+
   if (isOverCharge && L) {
     startFly(state, side, strength01, L);
     state.squash = 1.0;
@@ -171,6 +176,8 @@ function stepVehicleAct(state, dt, audio, L) {
       act.hitDone = true;
       audio?.playOnce?.();
 
+      if (L) triggerImpactFx(state, act.side, act.strength01, L, act.key);
+
       if (act.key === 'truck' || act.key === 'car') {
         if (act.chargeSec >= VEHICLE_FLY_SEC) {
           startFly(state, act.side, act.strength01, L);
@@ -199,6 +206,7 @@ function stepVehicleAct(state, dt, audio, L) {
       state.throwFx.crushed = true;
       state.squash = 1.0;
       state.flash = 1.0;
+      if (L) triggerImpactFx(state, (state.throwFx.side ?? act.side ?? -1), clamp(0.35 + 0.45 * (act.strength01 ?? 0), 0, 1), L, "crush");
     }
   }
 
@@ -467,5 +475,120 @@ function stepFly(state, dt, L) {
     state.omega = 0;
     state.squash = 0;
     state.flash = 0;
+  }
+}
+
+// ---------------------------
+// impact FX (shared across punch / hit / rage)
+// 3) contact shadow compression
+// 4) dent decal (on target)
+// 6) particles
+// ---------------------------
+function ensureImpactFx_(state) {
+  if (!state.fxImpact) {
+    state.fxImpact = { shadow: 0, shadowSide: -1, decals: [], parts: [] };
+  }
+  if (!Array.isArray(state.fxImpact.decals)) state.fxImpact.decals = [];
+  if (!Array.isArray(state.fxImpact.parts)) state.fxImpact.parts = [];
+}
+
+function triggerImpactFx(state, side, strength01, L, kind) {
+  if (!L) return;
+  ensureImpactFx_(state);
+
+  const fx = state.fxImpact;
+  const s = clamp(strength01 ?? 0, 0, 1);
+
+  // shadow pulse
+  fx.shadowSide = (side ?? -1);
+  fx.shadow = Math.max(fx.shadow ?? 0, 0.25 + 0.75 * s);
+
+  // dent decal (target-local)
+  const tgt = getTarget(state);
+  let u = 0.18 * (side ?? 1);
+  let v = (tgt.type === 'boss') ? -0.12 : -0.05;
+
+  // small jitter (keeps symmetry while avoiding perfect stacking)
+  u += (Math.random() - 0.5) * 0.05;
+  v += (Math.random() - 0.5) * 0.04;
+  u = clamp(u, -0.45, 0.45);
+  v = clamp(v, -0.45, 0.45);
+
+  const r01Base = lerp(0.055, 0.115, s) * ((tgt.type === 'boss') ? 1.10 : 1.00);
+  const life = lerp(2.0, 3.2, s);
+  fx.decals.push({ u, v, r01: r01Base, rot: (Math.random() * 2 - 1) * 0.8, age: 0, life, side: (side ?? 1) });
+  if (fx.decals.length > 12) fx.decals.splice(0, fx.decals.length - 12);
+
+  // particles (world-space)
+  let dx = 0, dy = 0;
+  if (state.fly?.active) {
+    dx = state.fly.x ?? 0;
+    dy = state.fly.y ?? 0;
+  } else if (state.throwFx?.active) {
+    dx = state.throwFx.x ?? 0;
+    dy = state.throwFx.y ?? 0;
+  }
+
+  const cx2 = L.cx + dx;
+  const cy2 = L.cy + dy;
+
+  const impactX = cx2 + (side ?? 1) * (L.objW * 0.18);
+  const impactY = cy2 + ((tgt.type === 'boss') ? (-L.objH * 0.12) : (-L.objH * 0.05));
+
+  let n = Math.round(8 + 18 * s);
+  if (kind === 'roller') n = Math.round(n * 1.15);
+  if (kind === 'truck') n = Math.round(n * 1.10);
+
+  const baseAngle = ((side ?? 1) < 0) ? Math.PI : 0;
+  const tilt = -0.45;
+  const spread = 0.95;
+
+  for (let i = 0; i < n; i++) {
+    const a = baseAngle + tilt + (Math.random() - 0.5) * 2 * spread;
+    const sp = L.minDim * (0.55 + 0.75 * Math.random()) * (0.20 + 0.85 * s);
+    const vx = Math.cos(a) * sp;
+    const vy = Math.sin(a) * sp;
+
+    const r = L.minDim * (0.0035 + 0.0040 * Math.random());
+    const lifeP = lerp(0.18, 0.55, Math.random()) * (0.75 + 0.65 * s);
+    const g = L.minDim * (2.2 + 1.0 * Math.random());
+    const alpha = 0.55 + 0.35 * Math.random();
+
+    fx.parts.push({ x: impactX, y: impactY, vx, vy, r, age: 0, life: lifeP, a: alpha, g });
+  }
+
+  // cap for rage spam
+  if (fx.parts.length > 180) fx.parts.splice(0, fx.parts.length - 180);
+}
+
+function stepImpactFx(state, dt) {
+  ensureImpactFx_(state);
+  const fx = state.fxImpact;
+
+  // shadow pulse decay
+  fx.shadow = (fx.shadow ?? 0) * Math.exp(-14.0 * dt);
+  if (fx.shadow < 1e-3) fx.shadow = 0;
+
+  // decals
+  for (let i = fx.decals.length - 1; i >= 0; i--) {
+    const d = fx.decals[i];
+    d.age += dt;
+    if (d.age >= d.life) fx.decals.splice(i, 1);
+  }
+
+  // particles
+  const drag = Math.exp(-3.2 * dt);
+  for (let i = fx.parts.length - 1; i >= 0; i--) {
+    const p = fx.parts[i];
+    p.age += dt;
+    if (p.age >= p.life) {
+      fx.parts.splice(i, 1);
+      continue;
+    }
+    p.vy += (p.g ?? 0) * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= drag;
+    p.vy *= drag;
   }
 }
