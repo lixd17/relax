@@ -40,13 +40,6 @@ export const VEHICLES = [
   // rocket 已移除（图片也可删除）
 ];
 
-
-export const BACKGROUNDS = [
-  { key: 'back1', src: withBase('assets/back1.png') },
-  { key: 'back2', src: withBase('assets/back2.png') },
-  // back0: user upload (no src)
-];
-
 export const ASSET = {
   fist: withBase('assets/fist.png'),
   music: withBase('assets/music1.mp3'),

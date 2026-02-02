@@ -10,7 +10,7 @@ import { fillRoundRect, strokeRoundRect } from '../core/utils.js';
 const TAU = Math.PI * 2;
 
 export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
-  drawBackground(ctx, L, state, imgs);
+  drawBackground(ctx, L);
 
   const mode = state.modeKey ?? 'punch';
   const targetImg = pickTargetImage(state, imgs);
@@ -158,70 +158,22 @@ function getVehicleWH(L, key, img) {
   return { w, h };
 }
 
-function imgSize_(img) {
-  const w = img?.naturalWidth ?? img?.width ?? 1;
-  const h = img?.naturalHeight ?? img?.height ?? 1;
-  return { w: Math.max(1, w), h: Math.max(1, h) };
-}
-
-function drawImageCover_(ctx, img, W, H) {
-  const { w: iw, h: ih } = imgSize_(img);
-  const s = Math.max(W / iw, H / ih);
-  const dw = iw * s;
-  const dh = ih * s;
-  const dx = (W - dw) / 2;
-  const dy = (H - dh) / 2;
-  ctx.drawImage(img, dx, dy, dw, dh);
-}
-
 // ------------------------
 // punch mode rendering
 // ------------------------
-function drawBackground(ctx, L, state, imgs) {
+function drawBackground(ctx, L) {
   const { W, H } = L;
-
-  // background images: back1/back2 (assets), back0 (user upload)
-  const key = state?.backgroundKey ?? 'default';
-  let bgImg = null;
-
-  if (key === 'back0') {
-    bgImg = state?.customBackground?.img ?? null;
-  } else if (key !== 'default') {
-    bgImg = imgs?.backgrounds?.get?.(key) ?? null;
-  }
-
-  if (bgImg) {
-    drawImageCover_(ctx, bgImg, W, H);
-
-    // subtle overlay for readability
-    ctx.save();
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(0,0,0,0.08)');
-    g.addColorStop(1, 'rgba(0,0,0,0.15)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.globalAlpha = 0.05;
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.ellipse(W * 0.5, H * 0.64, W * 0.62, H * 0.62, 0, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  // default gradient (brighter than before)
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#344a69');
-  g.addColorStop(1, '#1c2a3d');
+  g.addColorStop(0, '#233044');
+  g.addColorStop(1, '#141b26');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  ctx.globalAlpha = 0.06;
+  ctx.globalAlpha = 0.10;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.ellipse(W * 0.5, H * 0.64, W * 0.62, H * 0.62, 0, 0, TAU);
+  ctx.ellipse(W * 0.5, H * 0.62, W * 0.58, H * 0.58, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -315,6 +267,9 @@ function drawTarget(ctx, L, state, targetImg) {
   const y = cy2 - objH / 2;
 
   if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
+
+  drawImpactFx(ctx, L, state, "decal", cx2, cy2, objW, objH, special);
+
   if (state.flash > 0.02) {
     ctx.save();
     ctx.globalAlpha = 0.18 * state.flash;
@@ -625,11 +580,15 @@ function drawHint(ctx, L, state) {
 // ---------------------------
 // impact FX render (shared)
 // 3) contact shadow compression
+// 4) dent decal (on target)
 // 6) particles
 // ---------------------------
 function drawImpactFx(ctx, L, state, phase, cx2, cy2, objW, objH, special) {
   if (phase === "shadow") {
     return drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special);
+  }
+  if (phase === "decal") {
+    return drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH);
   }
   if (phase === "particles") {
     return drawImpactParticles(ctx, L, state);
@@ -645,20 +604,20 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   const side = fx.shadowSide ?? -1;
 
   // baseline shadow under target
-  const x = cx2 + side * objW * 0.22 * p;
-  const y = cy2 + objH * (0.53 + 0.09 * p);
+  const x = cx2 + side * objW * 0.05 * p;
+  const y = cy2 + objH * 0.53;
 
   const baseW = objW * 0.34;
   const baseH = objH * 0.085;
 
-  const w = baseW * (1 + 1.10 * p);
-  const h = Math.max(2, baseH * (1 - 0.82 * p));
+  const w = baseW * (1 + 0.55 * p);
+  const h = Math.max(2, baseH * (1 - 0.70 * p));
 
   ctx.save();
   ctx.globalAlpha = 0.10 + 0.22 * p;
 
   // soft edge
-  const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.62);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.55);
   g.addColorStop(0, 'rgba(0,0,0,0.85)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
@@ -669,6 +628,56 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   ctx.restore();
 }
 
+function drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH) {
+  const fx = state.fxImpact;
+  if (!fx || !Array.isArray(fx.decals) || fx.decals.length === 0) return;
+
+  const minR = Math.min(objW, objH);
+
+  ctx.save();
+  // keep decals on the target body
+  ctx.beginPath();
+  ctx.rect(cx2 - objW / 2, cy2 - objH / 2, objW, objH);
+  ctx.clip();
+
+  for (const d of fx.decals) {
+    const t = clamp((d.age ?? 0) / Math.max(1e-6, (d.life ?? 1)), 0, 1);
+    const fade = 1 - t;
+    const a = 0.22 * fade;
+    if (a <= 0.002) continue;
+
+    const r = clamp(d.r01 ?? 0.08, 0.03, 0.20) * minR;
+    const x = cx2 + clamp(d.u ?? 0, -0.48, 0.48) * objW;
+    const y = cy2 + clamp(d.v ?? 0, -0.48, 0.48) * objH;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(d.rot ?? 0);
+
+    // slight ellipse makes it look like a dent instead of a perfect sticker
+    ctx.scale(1.25, 0.88);
+
+    // dark center fade
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    g.addColorStop(0, `rgba(0,0,0,${0.35 * a})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TAU);
+    ctx.fill();
+
+    // subtle rim highlight
+    ctx.strokeStyle = `rgba(255,255,255,${0.18 * a})`;
+    ctx.lineWidth = Math.max(1, r * 0.18);
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.72, 0, TAU);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
 
 function drawImpactParticles(ctx, L, state) {
   const fx = state.fxImpact;

@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, VEHICLES, BACKGROUNDS, ASSET } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, ASSET } from './config.js';
 import { loadImage } from './utils.js';
 
 async function loadImageSafe(src) {
@@ -43,14 +43,5 @@ export async function loadAllImages() {
     })
   );
 
-  // backgrounds（缺图则跳过；render 会回退到默认渐变）
-  const backgrounds = new Map();
-  await Promise.all(
-    (BACKGROUNDS || []).map(async (b) => {
-      const img = await loadImageSafe(b.src);
-      if (img) backgrounds.set(b.key, img);
-    })
-  );
-
-  return { fist, targets, weapons, vehicles, backgrounds };
+  return { fist, targets, weapons, vehicles };
 }
