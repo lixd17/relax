@@ -185,6 +185,8 @@ export function attachInput(canvas, getDpr, state, audio) {
   window.addEventListener('keydown', (e) => {
     // 空格：老板键（任何模式都可用）
     if (e.code === 'Space' || e.key === ' ') {
+      // 输入框里按空格常用于中文输入法选词；这里不要触发老板键
+      if (isTypingTarget(e)) return;
       e.preventDefault();
       bossKeyToggle();
       return;

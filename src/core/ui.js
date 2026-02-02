@@ -1,9 +1,10 @@
-import { TARGETS, WEAPONS, VEHICLES, MODES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, BACKGROUNDS, MODES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
 import {
   stripExt,
   loadImageFromFile,
   imageToCanvasScaled,
   autoCropAlphaCanvas,
+  loadImage,
 } from './utils.js';
 import { cutoutPerson } from './cutout.js';
 
@@ -87,6 +88,33 @@ export function createUI(state, onTargetChange) {
         <div class="row">
           <label id="toolLabel" for="toolSel">Item</label>
           <select id="toolSel"></select>
+        </div>
+      </div>
+
+
+      <div class="panel" id="bgPanel">
+        <div class="panelTitle">Background</div>
+
+        <div class="row">
+          <label for="bgSel">BG</label>
+          <select id="bgSel"></select>
+        </div>
+
+        <div class="row rowTight">
+          <label class="inline">Upload</label>
+          <input id="bgUpload" type="file" accept="image/*" />
+          <button id="bgClear" type="button">Clear</button>
+        </div>
+
+        <div class="hint" id="bgHint">
+          菜单选 <strong>back0</strong> 表示使用你上传的背景（未上传会回退默认）。
+        </div>
+
+        <div class="row rowTight">
+          <div class="mini">
+            <canvas id="bgPreview" width="72" height="72"></canvas>
+          </div>
+          <div class="hint" id="bgMeta" style="margin:0;flex:1;min-width:140px;"></div>
         </div>
       </div>
 
@@ -234,6 +262,13 @@ export function createUI(state, onTargetChange) {
   const preview = dock.querySelector('#customPreview');
   const metaEl = dock.querySelector('#customMeta');
 
+  // ---------- Background ----------
+  const bgSel = dock.querySelector('#bgSel');
+  const bgUpload = dock.querySelector('#bgUpload');
+  const bgClear = dock.querySelector('#bgClear');
+  const bgPreview = dock.querySelector('#bgPreview');
+  const bgMeta = dock.querySelector('#bgMeta');
+
   let customEpoch = 0;
 
   function setBusy(busy, msg) {
@@ -371,6 +406,173 @@ export function createUI(state, onTargetChange) {
     btnUseCutout.disabled = !canUseCustomVariant('cutout');
     btnUseOriginal.disabled = !canUseCustomVariant('original');
   }
+  // ---------- Background (default/back1/back2/back0 upload) ----------
+  const bgCache = new Map(); // key -> HTMLImageElement | HTMLCanvasElement
+  function getBgKey() {
+    return state.backgroundKey ?? 'default';
+  }
+  function setBgKey(k) {
+    state.backgroundKey = k;
+  }
+
+  function buildBgMenu() {
+    bgSel.innerHTML = '';
+    const list = Array.isArray(BACKGROUNDS) && BACKGROUNDS.length
+      ? BACKGROUNDS
+      : [
+          { key: 'default', src: '' },
+          { key: 'back1', src: '' },
+          { key: 'back2', src: '' },
+          { key: 'back0', src: '' },
+        ];
+
+    for (const b of list) {
+      const opt = document.createElement('option');
+      opt.value = b.key;
+      opt.textContent = b.key;
+      bgSel.appendChild(opt);
+    }
+
+    // ensure default
+    if (!state.backgroundKey) state.backgroundKey = 'default';
+    bgSel.value = state.backgroundKey;
+  }
+
+  function revokeCustomBg_() {
+    try {
+      if (state.customBackground?.src) URL.revokeObjectURL(state.customBackground.src);
+    } catch (_) {}
+  }
+
+  async function setCustomBackgroundFromFile(file) {
+    if (!file) return;
+
+    // reset old url to avoid leaks
+    revokeCustomBg_();
+
+    const { img, url } = await loadImageFromFile(file);
+
+    // keep a reasonable upper bound; background doesn't need ultra high-res
+    const c = imageToCanvasScaled(img, 4096);
+
+    state.customBackground = {
+      src: url,
+      img: c,
+      meta: { name: file.name, w: c.width, h: c.height },
+    };
+
+    // switch to back0 automatically
+    state.backgroundKey = 'back0';
+    bgSel.value = 'back0';
+
+    drawPreviewBackground();
+    updateBgMeta();
+  }
+
+  async function getBackgroundThumb_(key) {
+    if (key === 'back0') {
+      return state.customBackground?.img ?? null;
+    }
+    if (key === 'default') return null;
+
+    if (bgCache.has(key)) return bgCache.get(key);
+
+    // find src
+    const item = (BACKGROUNDS || []).find((x) => x.key === key);
+    const src = item?.src;
+    if (!src) {
+      bgCache.set(key, null);
+      return null;
+    }
+
+    try {
+      const img = await loadImage(src);
+      bgCache.set(key, img);
+      return img;
+    } catch (e) {
+      console.warn('[bg] failed to load background:', key, src, e);
+      bgCache.set(key, null);
+      return null;
+    }
+  }
+
+  function drawPreviewBackground() {
+    if (!bgPreview) return;
+    const key = getBgKey();
+
+    const ctx = bgPreview.getContext('2d');
+    const W = bgPreview.width, H = bgPreview.height;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // default gradient thumb
+    if (key === 'default') {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#2b3a52');
+      g.addColorStop(1, '#1a2434');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = '700 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('default', W / 2, H / 2);
+      return;
+    }
+
+    // image-based thumbs (async load)
+    getBackgroundThumb_(key).then((img) => {
+      const ctx2 = bgPreview.getContext('2d');
+      ctx2.clearRect(0, 0, W, H);
+
+      if (!img) {
+        // no image available
+        ctx2.fillStyle = 'rgba(255,255,255,0.10)';
+        ctx2.fillRect(0, 0, W, H);
+        ctx2.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx2.font = '700 12px sans-serif';
+        ctx2.textAlign = 'center';
+        ctx2.textBaseline = 'middle';
+        ctx2.fillText(key, W / 2, H / 2);
+        return;
+      }
+
+      const iw = img.naturalWidth || img.width || 1;
+      const ih = img.naturalHeight || img.height || 1;
+      const s = Math.max(W / iw, H / ih);
+      const w = iw * s, h = ih * s;
+      const x = (W - w) / 2, y = (H - h) / 2;
+      ctx2.drawImage(img, x, y, w, h);
+
+      // label
+      ctx2.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx2.fillRect(0, H - 16, W, 16);
+      ctx2.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx2.font = '700 11px sans-serif';
+      ctx2.textAlign = 'center';
+      ctx2.textBaseline = 'middle';
+      ctx2.fillText(key, W / 2, H - 8);
+    });
+  }
+
+  function updateBgMeta() {
+    if (!bgMeta) return;
+    const key = getBgKey();
+
+    if (key === 'back0') {
+      const m = state.customBackground?.meta;
+      if (!m) {
+        bgMeta.textContent = 'back0：未上传背景';
+      } else {
+        bgMeta.textContent = `back0：${m.name} (${m.w}×${m.h})`;
+      }
+      return;
+    }
+
+    bgMeta.textContent = key === 'default' ? '默认渐变背景' : `${key}：来自 /public/assets/${key}.png`;
+  }
+
+
 
   async function setCustomTargetFromFile(file) {
     if (!state.customTarget) state.customTarget = { src: null, cutout: null, img: null, meta: null };
@@ -598,6 +800,42 @@ export function createUI(state, onTargetChange) {
   syncNameInput();
   drawPreviewFromCustom();
   updateStatusLine();
+
+  // Background init
+  buildBgMenu();
+  drawPreviewBackground();
+  updateBgMeta();
+
+  bgSel.addEventListener('change', () => {
+    setBgKey(bgSel.value);
+    drawPreviewBackground();
+    updateBgMeta();
+  });
+
+  bgUpload.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await setCustomBackgroundFromFile(file);
+    } catch (err) {
+      console.error(err);
+      alert('背景读取失败，请换一张图片试试');
+    } finally {
+      bgUpload.value = '';
+    }
+  });
+
+  bgClear.addEventListener('click', () => {
+    revokeCustomBg_();
+    state.customBackground = { src: null, img: null, meta: null };
+    if ((state.backgroundKey ?? 'default') === 'back0') {
+      state.backgroundKey = 'default';
+      bgSel.value = 'default';
+    }
+    drawPreviewBackground();
+    updateBgMeta();
+  });
+
   setOpen(false);
 
   return { modeSel, targetSel, toolSel, nameInput };

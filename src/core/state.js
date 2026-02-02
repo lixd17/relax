@@ -12,6 +12,10 @@ export function createState() {
     modeKey: 'punch',
     targetKey: TARGETS[0].key,
 
+    // background
+    backgroundKey: 'default',
+    customBackground: { src: null, img: null, meta: null },
+
     // custom 上传：
     // - src   : 原始(已缩放)图（用于切回原图 / 重新抠图）
     // - cutout: 抠图结果（可能为 null）
@@ -105,14 +109,11 @@ export function createState() {
       h: 0,
     },
 
-    // impact FX: contact shadow + dent decal + particles
+    // impact FX: contact shadow + particles
     fxImpact: {
       // 0..1 pulse strength, decays quickly
       shadow: 0,
       shadowSide: -1,
-
-      // decals are stored in target-local normalized coords (u,v)
-      decals: [], // {u,v,r01,rot,age,life,side}
 
       // particles are world-space
       parts: [],  // {x,y,vx,vy,r,age,life,a,g}

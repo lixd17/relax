@@ -3,7 +3,7 @@ html, body, #app {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #141b26;
+  background: #1a2434;
   user-select: none;
 }
 
@@ -324,4 +324,13 @@ canvas {
   background: rgba(20,30,40,0.70);
   color: rgba(255,255,255,0.92);
   font-size: 11px;
+}
+
+
+#bgPreview {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
 }

@@ -48,7 +48,7 @@ export function updatePhysics(state, dt, audio, L) {
   state.squash *= Math.exp(-10.0 * dt);
   state.flash *= Math.exp(-12.0 * dt);
 
-  // impact fx (decals/particles/shadow)
+  // impact fx (shadow/particles)
   stepImpactFx(state, dt);
 
   // punch animation (punch mode only)
@@ -481,14 +481,12 @@ function stepFly(state, dt, L) {
 // ---------------------------
 // impact FX (shared across punch / hit / rage)
 // 3) contact shadow compression
-// 4) dent decal (on target)
 // 6) particles
 // ---------------------------
 function ensureImpactFx_(state) {
   if (!state.fxImpact) {
-    state.fxImpact = { shadow: 0, shadowSide: -1, decals: [], parts: [] };
+    state.fxImpact = { shadow: 0, shadowSide: -1, parts: [] };
   }
-  if (!Array.isArray(state.fxImpact.decals)) state.fxImpact.decals = [];
   if (!Array.isArray(state.fxImpact.parts)) state.fxImpact.parts = [];
 }
 
@@ -498,26 +496,11 @@ function triggerImpactFx(state, side, strength01, L, kind) {
 
   const fx = state.fxImpact;
   const s = clamp(strength01 ?? 0, 0, 1);
+  const tgt = getTarget(state);
 
   // shadow pulse
   fx.shadowSide = (side ?? -1);
   fx.shadow = Math.max(fx.shadow ?? 0, 0.25 + 0.75 * s);
-
-  // dent decal (target-local)
-  const tgt = getTarget(state);
-  let u = 0.18 * (side ?? 1);
-  let v = (tgt.type === 'boss') ? -0.12 : -0.05;
-
-  // small jitter (keeps symmetry while avoiding perfect stacking)
-  u += (Math.random() - 0.5) * 0.05;
-  v += (Math.random() - 0.5) * 0.04;
-  u = clamp(u, -0.45, 0.45);
-  v = clamp(v, -0.45, 0.45);
-
-  const r01Base = lerp(0.055, 0.115, s) * ((tgt.type === 'boss') ? 1.10 : 1.00);
-  const life = lerp(2.0, 3.2, s);
-  fx.decals.push({ u, v, r01: r01Base, rot: (Math.random() * 2 - 1) * 0.8, age: 0, life, side: (side ?? 1) });
-  if (fx.decals.length > 12) fx.decals.splice(0, fx.decals.length - 12);
 
   // particles (world-space)
   let dx = 0, dy = 0;
@@ -568,13 +551,6 @@ function stepImpactFx(state, dt) {
   // shadow pulse decay
   fx.shadow = (fx.shadow ?? 0) * Math.exp(-14.0 * dt);
   if (fx.shadow < 1e-3) fx.shadow = 0;
-
-  // decals
-  for (let i = fx.decals.length - 1; i >= 0; i--) {
-    const d = fx.decals[i];
-    d.age += dt;
-    if (d.age >= d.life) fx.decals.splice(i, 1);
-  }
 
   // particles
   const drag = Math.exp(-3.2 * dt);

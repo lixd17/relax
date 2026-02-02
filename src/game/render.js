@@ -10,7 +10,7 @@ import { fillRoundRect, strokeRoundRect } from '../core/utils.js';
 const TAU = Math.PI * 2;
 
 export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
-  drawBackground(ctx, L);
+  drawBackground(ctx, L, state, imgs);
 
   const mode = state.modeKey ?? 'punch';
   const targetImg = pickTargetImage(state, imgs);
@@ -161,24 +161,69 @@ function getVehicleWH(L, key, img) {
 // ------------------------
 // punch mode rendering
 // ------------------------
-function drawBackground(ctx, L) {
+function drawImageCover_(ctx, img, dx, dy, dw, dh) {
+  const iw = img?.naturalWidth || img?.width || 1;
+  const ih = img?.naturalHeight || img?.height || 1;
+  const s = Math.max(dw / iw, dh / ih);
+  const w = iw * s;
+  const h = ih * s;
+  const x = dx + (dw - w) / 2;
+  const y = dy + (dh - h) / 2;
+  ctx.drawImage(img, x, y, w, h);
+}
+
+function drawBackground(ctx, L, state, imgs) {
   const { W, H } = L;
+
+  // background select: default / back1 / back2 / back0(upload)
+  const key = state.backgroundKey ?? 'default';
+
+  let bgImg = null;
+  if (key === 'back0') {
+    bgImg = state.customBackground?.img ?? null;
+  } else if (key !== 'default') {
+    bgImg = imgs.backgrounds?.get(key) ?? null;
+  }
+
+  if (bgImg) {
+    // image background
+    ctx.save();
+    drawImageCover_(ctx, bgImg, 0, 0, W, H);
+
+    // a subtle unified overlay so UI text remains readable
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(0,0,0,0.10)');
+    g.addColorStop(1, 'rgba(0,0,0,0.18)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // lighter vignette (keep it subtle)
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(W * 0.5, H * 0.62, W * 0.60, H * 0.60, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  // default gradient (slightly brighter than before)
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#233044');
-  g.addColorStop(1, '#141b26');
+  g.addColorStop(0, '#2b3a52');
+  g.addColorStop(1, '#1a2434');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.07;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.ellipse(W * 0.5, H * 0.62, W * 0.58, H * 0.58, 0, 0, Math.PI * 2);
+  ctx.ellipse(W * 0.5, H * 0.62, W * 0.60, H * 0.60, 0, 0, TAU);
   ctx.fill();
   ctx.restore();
 }
 
-function drawTarget(ctx, L, state, targetImg) {
+function drawTarget(ctx, L, state, targetImg) {(ctx, L, state, targetImg) {
   const { objW, objH, cx, cy, pivotX, pivotY, minDim } = L;
   const tgt = getTarget(state);
   const isFly = !!state.fly?.active;
@@ -268,7 +313,6 @@ function drawTarget(ctx, L, state, targetImg) {
 
   if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
 
-  drawImpactFx(ctx, L, state, "decal", cx2, cy2, objW, objH, special);
 
   if (state.flash > 0.02) {
     ctx.save();
@@ -580,15 +624,11 @@ function drawHint(ctx, L, state) {
 // ---------------------------
 // impact FX render (shared)
 // 3) contact shadow compression
-// 4) dent decal (on target)
 // 6) particles
 // ---------------------------
 function drawImpactFx(ctx, L, state, phase, cx2, cy2, objW, objH, special) {
   if (phase === "shadow") {
     return drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special);
-  }
-  if (phase === "decal") {
-    return drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH);
   }
   if (phase === "particles") {
     return drawImpactParticles(ctx, L, state);
@@ -603,21 +643,21 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   const p = clamp(fx.shadow, 0, 1);
   const side = fx.shadowSide ?? -1;
 
-  // baseline shadow under target
-  const x = cx2 + side * objW * 0.05 * p;
-  const y = cy2 + objH * 0.53;
+  // baseline shadow under target (make the shift a bit more noticeable)
+  const x = cx2 + side * objW * (0.12 * p);
+  const y = cy2 + objH * (0.53 + 0.04 * p);
 
   const baseW = objW * 0.34;
   const baseH = objH * 0.085;
 
-  const w = baseW * (1 + 0.55 * p);
-  const h = Math.max(2, baseH * (1 - 0.70 * p));
+  const w = baseW * (1 + 0.80 * p);
+  const h = Math.max(2, baseH * (1 - 0.78 * p));
 
   ctx.save();
-  ctx.globalAlpha = 0.10 + 0.22 * p;
+  ctx.globalAlpha = 0.12 + 0.28 * p;
 
   // soft edge
-  const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.55);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.62);
   g.addColorStop(0, 'rgba(0,0,0,0.85)');
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
@@ -628,56 +668,6 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   ctx.restore();
 }
 
-function drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH) {
-  const fx = state.fxImpact;
-  if (!fx || !Array.isArray(fx.decals) || fx.decals.length === 0) return;
-
-  const minR = Math.min(objW, objH);
-
-  ctx.save();
-  // keep decals on the target body
-  ctx.beginPath();
-  ctx.rect(cx2 - objW / 2, cy2 - objH / 2, objW, objH);
-  ctx.clip();
-
-  for (const d of fx.decals) {
-    const t = clamp((d.age ?? 0) / Math.max(1e-6, (d.life ?? 1)), 0, 1);
-    const fade = 1 - t;
-    const a = 0.22 * fade;
-    if (a <= 0.002) continue;
-
-    const r = clamp(d.r01 ?? 0.08, 0.03, 0.20) * minR;
-    const x = cx2 + clamp(d.u ?? 0, -0.48, 0.48) * objW;
-    const y = cy2 + clamp(d.v ?? 0, -0.48, 0.48) * objH;
-
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(d.rot ?? 0);
-
-    // slight ellipse makes it look like a dent instead of a perfect sticker
-    ctx.scale(1.25, 0.88);
-
-    // dark center fade
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    g.addColorStop(0, `rgba(0,0,0,${0.35 * a})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
-    ctx.fill();
-
-    // subtle rim highlight
-    ctx.strokeStyle = `rgba(255,255,255,${0.18 * a})`;
-    ctx.lineWidth = Math.max(1, r * 0.18);
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.72, 0, TAU);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  ctx.restore();
-}
 
 function drawImpactParticles(ctx, L, state) {
   const fx = state.fxImpact;
