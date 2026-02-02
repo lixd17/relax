@@ -13,6 +13,7 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
 
   const mode = state.modeKey ?? 'punch';
   const targetImg = pickTargetImage(state, imgs);
+  const TAU = Math.PI * 2;
 
   if (mode === 'hit') {
     renderHitMode(ctx, L, state, imgs, targetImg, nowMs, getDpr);
