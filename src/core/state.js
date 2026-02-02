@@ -12,9 +12,9 @@ export function createState() {
     modeKey: 'punch',
     targetKey: TARGETS[0].key,
 
-    // background
+    // background: 'default' | 'back1' | 'back2' | 'back0'(upload)
     backgroundKey: 'default',
-    customBackground: { src: null, img: null, meta: null },
+    customBackground: { img: null, meta: null },
 
     // custom 上传：
     // - src   : 原始(已缩放)图（用于切回原图 / 重新抠图）

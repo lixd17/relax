@@ -3,7 +3,7 @@ html, body, #app {
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #1a2434;
+  background: #1c2a3d;
   user-select: none;
 }
 
@@ -23,7 +23,7 @@ canvas {
   position: fixed;
   inset: 0;
   z-index: 19;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0,0,0,0.28);
   backdrop-filter: blur(1px);
 }
 
@@ -38,7 +38,7 @@ canvas {
   border-radius: 12px;
   overflow: hidden;
 
-  background: rgba(0,0,0,0.25);
+  background: rgba(0,0,0,0.18);
   backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,0.12);
 }
@@ -249,7 +249,7 @@ canvas {
   overflow: auto;
 
   border-radius: 12px;
-  background: rgba(0,0,0,0.35);
+  background: rgba(0,0,0,0.28);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.14);
   padding: 12px 12px;
@@ -324,13 +324,4 @@ canvas {
   background: rgba(20,30,40,0.70);
   color: rgba(255,255,255,0.92);
   font-size: 11px;
-}
-
-
-#bgPreview {
-  width: 72px;
-  height: 72px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
 }

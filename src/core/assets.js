@@ -15,7 +15,7 @@ export async function loadAllImages() {
   // fist 兜底：必须加载成功
   const fist = await loadImage(ASSET.fist);
 
-  // targets（custom/back0 没 src：跳过）
+  // targets（custom 没 src：跳过）
   const targets = new Map();
   await Promise.all(
     TARGETS.map(async (t) => {
@@ -43,11 +43,10 @@ export async function loadAllImages() {
     })
   );
 
-  // backgrounds（default/back0 没 src：跳过）
+  // backgrounds（缺图则跳过；render 会回退到默认渐变）
   const backgrounds = new Map();
   await Promise.all(
     (BACKGROUNDS || []).map(async (b) => {
-      if (!b?.src) return;
       const img = await loadImageSafe(b.src);
       if (img) backgrounds.set(b.key, img);
     })

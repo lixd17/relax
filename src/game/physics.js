@@ -487,7 +487,7 @@ function ensureImpactFx_(state) {
   if (!state.fxImpact) {
     state.fxImpact = { shadow: 0, shadowSide: -1, parts: [] };
   }
-  if (!Array.isArray(state.fxImpact.parts)) state.fxImpact.parts = [];
+if (!Array.isArray(state.fxImpact.parts)) state.fxImpact.parts = [];
 }
 
 function triggerImpactFx(state, side, strength01, L, kind) {
@@ -496,11 +496,11 @@ function triggerImpactFx(state, side, strength01, L, kind) {
 
   const fx = state.fxImpact;
   const s = clamp(strength01 ?? 0, 0, 1);
-  const tgt = getTarget(state);
 
   // shadow pulse
   fx.shadowSide = (side ?? -1);
   fx.shadow = Math.max(fx.shadow ?? 0, 0.25 + 0.75 * s);
+
 
   // particles (world-space)
   let dx = 0, dy = 0;
@@ -551,6 +551,7 @@ function stepImpactFx(state, dt) {
   // shadow pulse decay
   fx.shadow = (fx.shadow ?? 0) * Math.exp(-14.0 * dt);
   if (fx.shadow < 1e-3) fx.shadow = 0;
+
 
   // particles
   const drag = Math.exp(-3.2 * dt);

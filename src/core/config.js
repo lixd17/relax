@@ -20,14 +20,6 @@ export const TARGETS = [
   { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
 ];
 
-
-export const BACKGROUNDS = [
-  { key: 'default', src: '' }, // built-in gradient
-  { key: 'back1',   src: withBase('assets/back1.png') },
-  { key: 'back2',   src: withBase('assets/back2.png') },
-  { key: 'back0',   src: '' }, // user upload slot
-];
-
 export const MODES = [
   { key: 'punch', label: 'punch' },
   { key: 'hit',   label: 'hit' },
@@ -46,6 +38,13 @@ export const VEHICLES = [
   { key: 'car',    src: withBase('assets/car.png') },
   { key: 'roller', src: withBase('assets/roller.png') },
   // rocket 已移除（图片也可删除）
+];
+
+
+export const BACKGROUNDS = [
+  { key: 'back1', src: withBase('assets/back1.png') },
+  { key: 'back2', src: withBase('assets/back2.png') },
+  // back0: user upload (no src)
 ];
 
 export const ASSET = {

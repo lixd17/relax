@@ -158,72 +158,75 @@ function getVehicleWH(L, key, img) {
   return { w, h };
 }
 
+function imgSize_(img) {
+  const w = img?.naturalWidth ?? img?.width ?? 1;
+  const h = img?.naturalHeight ?? img?.height ?? 1;
+  return { w: Math.max(1, w), h: Math.max(1, h) };
+}
+
+function drawImageCover_(ctx, img, W, H) {
+  const { w: iw, h: ih } = imgSize_(img);
+  const s = Math.max(W / iw, H / ih);
+  const dw = iw * s;
+  const dh = ih * s;
+  const dx = (W - dw) / 2;
+  const dy = (H - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+}
+
 // ------------------------
 // punch mode rendering
 // ------------------------
-function drawImageCover_(ctx, img, dx, dy, dw, dh) {
-  const iw = img?.naturalWidth || img?.width || 1;
-  const ih = img?.naturalHeight || img?.height || 1;
-  const s = Math.max(dw / iw, dh / ih);
-  const w = iw * s;
-  const h = ih * s;
-  const x = dx + (dw - w) / 2;
-  const y = dy + (dh - h) / 2;
-  ctx.drawImage(img, x, y, w, h);
-}
-
 function drawBackground(ctx, L, state, imgs) {
   const { W, H } = L;
 
-  // background select: default / back1 / back2 / back0(upload)
-  const key = state.backgroundKey ?? 'default';
-
+  // background images: back1/back2 (assets), back0 (user upload)
+  const key = state?.backgroundKey ?? 'default';
   let bgImg = null;
+
   if (key === 'back0') {
-    bgImg = state.customBackground?.img ?? null;
+    bgImg = state?.customBackground?.img ?? null;
   } else if (key !== 'default') {
-    bgImg = imgs.backgrounds?.get(key) ?? null;
+    bgImg = imgs?.backgrounds?.get?.(key) ?? null;
   }
 
   if (bgImg) {
-    // image background
-    ctx.save();
-    drawImageCover_(ctx, bgImg, 0, 0, W, H);
+    drawImageCover_(ctx, bgImg, W, H);
 
-    // a subtle unified overlay so UI text remains readable
+    // subtle overlay for readability
+    ctx.save();
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(0,0,0,0.10)');
-    g.addColorStop(1, 'rgba(0,0,0,0.18)');
+    g.addColorStop(0, 'rgba(0,0,0,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0.15)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // lighter vignette (keep it subtle)
-    ctx.globalAlpha = 0.06;
+    ctx.globalAlpha = 0.05;
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.ellipse(W * 0.5, H * 0.62, W * 0.60, H * 0.60, 0, 0, TAU);
+    ctx.ellipse(W * 0.5, H * 0.64, W * 0.62, H * 0.62, 0, 0, TAU);
     ctx.fill();
     ctx.restore();
     return;
   }
 
-  // default gradient (slightly brighter than before)
+  // default gradient (brighter than before)
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#2b3a52');
-  g.addColorStop(1, '#1a2434');
+  g.addColorStop(0, '#344a69');
+  g.addColorStop(1, '#1c2a3d');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.06;
   ctx.fillStyle = '#000';
   ctx.beginPath();
-  ctx.ellipse(W * 0.5, H * 0.62, W * 0.60, H * 0.60, 0, 0, TAU);
+  ctx.ellipse(W * 0.5, H * 0.64, W * 0.62, H * 0.62, 0, 0, TAU);
   ctx.fill();
   ctx.restore();
 }
 
-function drawTarget(ctx, L, state, targetImg) {(ctx, L, state, targetImg) {
+function drawTarget(ctx, L, state, targetImg) {
   const { objW, objH, cx, cy, pivotX, pivotY, minDim } = L;
   const tgt = getTarget(state);
   const isFly = !!state.fly?.active;
@@ -312,8 +315,6 @@ function drawTarget(ctx, L, state, targetImg) {(ctx, L, state, targetImg) {
   const y = cy2 - objH / 2;
 
   if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
-
-
   if (state.flash > 0.02) {
     ctx.save();
     ctx.globalAlpha = 0.18 * state.flash;
@@ -643,18 +644,18 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   const p = clamp(fx.shadow, 0, 1);
   const side = fx.shadowSide ?? -1;
 
-  // baseline shadow under target (make the shift a bit more noticeable)
-  const x = cx2 + side * objW * (0.12 * p);
-  const y = cy2 + objH * (0.53 + 0.04 * p);
+  // baseline shadow under target
+  const x = cx2 + side * objW * 0.22 * p;
+  const y = cy2 + objH * (0.53 + 0.09 * p);
 
   const baseW = objW * 0.34;
   const baseH = objH * 0.085;
 
-  const w = baseW * (1 + 0.80 * p);
-  const h = Math.max(2, baseH * (1 - 0.78 * p));
+  const w = baseW * (1 + 1.10 * p);
+  const h = Math.max(2, baseH * (1 - 0.82 * p));
 
   ctx.save();
-  ctx.globalAlpha = 0.12 + 0.28 * p;
+  ctx.globalAlpha = 0.10 + 0.22 * p;
 
   // soft edge
   const g = ctx.createRadialGradient(x, y, 0, x, y, w * 0.62);
