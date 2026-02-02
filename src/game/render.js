@@ -164,13 +164,13 @@ function getVehicleWH(L, key, img) {
 function drawBackground(ctx, L) {
   const { W, H } = L;
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#0b0f14');
-  g.addColorStop(1, '#121a24');
+  g.addColorStop(0, '#233044');
+  g.addColorStop(1, '#141b26');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
-  ctx.globalAlpha = 0.20;
+  ctx.globalAlpha = 0.10;
   ctx.fillStyle = '#000';
   ctx.beginPath();
   ctx.ellipse(W * 0.5, H * 0.62, W * 0.58, H * 0.58, 0, 0, Math.PI * 2);
