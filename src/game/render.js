@@ -7,13 +7,14 @@ import {
 import { clamp, lerp, easeOutCubic, easeInCubic, deg2rad } from '../core/utils.js';
 import { getTarget } from './layout.js';
 import { fillRoundRect, strokeRoundRect } from '../core/utils.js';
+const TAU = Math.PI * 2;
 
 export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
   drawBackground(ctx, L);
 
   const mode = state.modeKey ?? 'punch';
   const targetImg = pickTargetImage(state, imgs);
-  const TAU = Math.PI * 2;
+
 
   if (mode === 'hit') {
     renderHitMode(ctx, L, state, imgs, targetImg, nowMs, getDpr);
