@@ -1,4 +1,14 @@
-import { TARGETS, WEAPONS, VEHICLES, MODES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
+import {
+  TARGETS,
+  WEAPONS,
+  VEHICLES,
+  MODES,
+  BACKGROUNDS,
+  DEFAULT_BG_KEY,
+  CUSTOM_BG_KEY,
+  CUSTOM_TARGET_KEY,
+  BOSSKEY_TARGET_KEY,
+} from './config.js';
 import {
   stripExt,
   loadImageFromFile,
@@ -87,6 +97,24 @@ export function createUI(state, onTargetChange) {
         <div class="row">
           <label id="toolLabel" for="toolSel">Item</label>
           <select id="toolSel"></select>
+        </div>
+
+        <div class="row">
+          <label for="bgSel">Background</label>
+          <select id="bgSel"></select>
+        </div>
+
+        <div class="row">
+          <label for="bgInput">BG Image</label>
+          <input id="bgInput" type="file" accept="image/*" />
+          <button id="bgClear" type="button">清除</button>
+        </div>
+
+        <div class="row rowTight">
+          <div class="mini">
+            <canvas id="bgPreview" width="72" height="72"></canvas>
+          </div>
+          <div class="hint" id="bgMeta"></div>
         </div>
       </div>
 
@@ -512,6 +540,13 @@ export function createUI(state, onTargetChange) {
   const toolSel = dock.querySelector('#toolSel');
   const toolLabel = dock.querySelector('#toolLabel');
 
+  // background controls
+  const bgSel = dock.querySelector('#bgSel');
+  const bgInput = dock.querySelector('#bgInput');
+  const bgClear = dock.querySelector('#bgClear');
+  const bgPreview = dock.querySelector('#bgPreview');
+  const bgMeta = dock.querySelector('#bgMeta');
+
   // Mode options
   for (const m of MODES) {
     const opt = document.createElement('option');
@@ -567,6 +602,93 @@ export function createUI(state, onTargetChange) {
     }
   }
 
+  // Background options
+  bgSel.innerHTML = '';
+  for (const b of (BACKGROUNDS ?? [])) {
+    const opt = document.createElement('option');
+    opt.value = b.key;
+    if (b.key === DEFAULT_BG_KEY) opt.textContent = 'default';
+    else if (b.key === CUSTOM_BG_KEY) opt.textContent = `${CUSTOM_BG_KEY} (upload)`;
+    else opt.textContent = stripExt(b.key);
+    bgSel.appendChild(opt);
+  }
+  if (!state.backgroundKey) state.backgroundKey = DEFAULT_BG_KEY;
+  bgSel.value = state.backgroundKey;
+
+  function drawBgPreview() {
+    if (!bgPreview) return;
+    const ctx = bgPreview.getContext('2d');
+    ctx.clearRect(0, 0, bgPreview.width, bgPreview.height);
+
+    const img = state.customBackground?.img;
+    if (!img) {
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('no', bgPreview.width / 2, bgPreview.height / 2 - 6);
+      ctx.fillText('bg', bgPreview.width / 2, bgPreview.height / 2 + 8);
+      ctx.globalAlpha = 1;
+      if (bgMeta) bgMeta.textContent = '';
+      return;
+    }
+
+    const iw = img.width || img.naturalWidth || 1;
+    const ih = img.height || img.naturalHeight || 1;
+    const s = Math.min(bgPreview.width / iw, bgPreview.height / ih);
+    const w = iw * s;
+    const h = ih * s;
+    const x = (bgPreview.width - w) / 2;
+    const y = (bgPreview.height - h) / 2;
+    ctx.drawImage(img, x, y, w, h);
+
+    const m = state.customBackground?.meta;
+    if (bgMeta) {
+      bgMeta.textContent = m ? `已上传：${m.w}×${m.h}` : `已上传：${iw}×${ih}`;
+    }
+  }
+
+  async function setCustomBackgroundFromFile(file) {
+    try {
+      const { img, url } = await loadImageFromFile(file);
+      const canvas = imageToCanvasScaled(img, 4096);
+      URL.revokeObjectURL(url);
+
+      if (!state.customBackground) state.customBackground = { img: null, meta: null };
+      state.customBackground.img = canvas;
+      state.customBackground.meta = { w: canvas.width, h: canvas.height, from: file.name || 'upload' };
+      state.backgroundKey = CUSTOM_BG_KEY;
+      bgSel.value = CUSTOM_BG_KEY;
+      drawBgPreview();
+      updateStatusLine();
+      if (bgMeta) bgMeta.textContent = `已上传：${canvas.width}×${canvas.height}`;
+    } catch (e) {
+      console.warn('[ui] upload background failed', e);
+      if (bgMeta) bgMeta.textContent = '背景加载失败：请换一张试试（建议 PNG/JPG）';
+    }
+  }
+
+  bgInput.addEventListener('change', async () => {
+    const file = bgInput.files?.[0];
+    if (!file) return;
+    await setCustomBackgroundFromFile(file);
+    bgInput.value = '';
+  });
+
+  bgClear.addEventListener('click', () => {
+    if (state.customBackground) {
+      state.customBackground.img = null;
+      state.customBackground.meta = null;
+    }
+    if (state.backgroundKey === CUSTOM_BG_KEY) {
+      state.backgroundKey = DEFAULT_BG_KEY;
+      bgSel.value = state.backgroundKey;
+    }
+    drawBgPreview();
+    updateStatusLine();
+  });
+
   modeSel.addEventListener('change', () => {
     state.modeKey = modeSel.value;
     // 切模式时清理可能遗留的输入/动画状态（避免交叉影响）
@@ -594,17 +716,30 @@ export function createUI(state, onTargetChange) {
     updateStatusLine();
   });
 
+  bgSel.addEventListener('change', () => {
+    state.backgroundKey = bgSel.value;
+    // 选 back0 但还没上传：弹出选择文件
+    if (state.backgroundKey === CUSTOM_BG_KEY && !state.customBackground?.img) {
+      bgMeta.textContent = '未上传背景：请选择一张图片';
+      // change 事件是用户手势，可安全触发
+      bgInput.click();
+    }
+    updateStatusLine();
+  });
+
   function updateStatusLine() {
     const mode = state.modeKey ?? 'punch';
     const target = state.targetKey ?? 'sandbag';
     const tool = (mode === 'hit') ? (state.vehicleKey ?? 'truck') : (state.weaponKey ?? 'fist');
-    statusEl.textContent = `${mode} · ${target} · ${tool}`;
+    const bg = state.backgroundKey ?? DEFAULT_BG_KEY;
+    statusEl.textContent = `${mode} · ${target} · ${tool} · ${bg}`;
   }
 
   // 初始
   rebuildToolMenu();
   syncNameInput();
   drawPreviewFromCustom();
+  drawBgPreview();
   updateStatusLine();
   setOpen(false);
 

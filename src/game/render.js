@@ -1,6 +1,8 @@
 import {
   FIST_SIZE_FACTOR, CHARGE_MAX_SEC,
   VEHICLE_SIZE_SCALE,
+  DEFAULT_BG_KEY,
+  CUSTOM_BG_KEY,
 } from '../core/config.js';
 
 import { clamp, lerp, easeOutCubic, easeInCubic, deg2rad } from '../core/utils.js';
@@ -9,7 +11,7 @@ import { fillRoundRect, strokeRoundRect } from '../core/utils.js';
 const TAU = Math.PI * 2;
 
 export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
-  drawBackground(ctx, L);
+  drawBackground(ctx, L, state, imgs);
 
   const mode = state.modeKey ?? 'punch';
   // 目标贴图由主循环统一选择（用于 layout + render 保持一致）
@@ -151,21 +153,48 @@ function getVehicleWH(L, key, img) {
 // ------------------------
 // punch mode rendering
 // ------------------------
-function drawBackground(ctx, L) {
+function drawBackground(ctx, L, state, imgs) {
   const { W, H } = L;
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#233044');
-  g.addColorStop(1, '#141b26');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  const key = state.backgroundKey ?? DEFAULT_BG_KEY;
 
+  // 1) pick bg image (builtin or uploaded)
+  let bgImg = null;
+  if (key === CUSTOM_BG_KEY) bgImg = state.customBackground?.img || null;
+  else bgImg = imgs.backgrounds?.get?.(key) || null;
+
+  if (bgImg) {
+    drawImageCover(ctx, bgImg, W, H);
+  } else {
+    drawDefaultBackground(ctx, W, H);
+  }
+
+  // subtle vignette to keep foreground readable
   ctx.save();
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.08;
   ctx.fillStyle = '#000';
   ctx.beginPath();
   ctx.ellipse(W * 0.5, H * 0.62, W * 0.58, H * 0.58, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+}
+
+function drawDefaultBackground(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#233044');
+  g.addColorStop(1, '#141b26');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawImageCover(ctx, img, W, H) {
+  const iw = img.width || img.naturalWidth || 1;
+  const ih = img.height || img.naturalHeight || 1;
+  const s = Math.max(W / iw, H / ih);
+  const w = iw * s;
+  const h = ih * s;
+  const x = (W - w) / 2;
+  const y = (H - h) / 2;
+  ctx.drawImage(img, x, y, w, h);
 }
 
 function drawTarget(ctx, L, state, targetImg) {

@@ -1,4 +1,4 @@
-import { TARGETS, WEAPONS, VEHICLES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY } from './config.js';
+import { TARGETS, WEAPONS, VEHICLES, CUSTOM_TARGET_KEY, BOSSKEY_TARGET_KEY, DEFAULT_BG_KEY } from './config.js';
 
 export function createState() {
   return {
@@ -11,6 +11,12 @@ export function createState() {
 
     modeKey: 'punch',
     targetKey: TARGETS[0].key,
+
+    // background
+    backgroundKey: DEFAULT_BG_KEY,
+
+    // back0：用户上传背景槽
+    customBackground: { img: null, meta: null },
 
     // custom 上传：
     // - src   : 原始(已缩放)图（用于切回原图 / 重新抠图）

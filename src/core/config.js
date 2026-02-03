@@ -7,6 +7,10 @@ const withBase = (p) => {
 export const CUSTOM_TARGET_KEY = 'custom';
 export const BOSSKEY_TARGET_KEY = 'stealth';
 
+// background
+export const DEFAULT_BG_KEY = 'default';
+export const CUSTOM_BG_KEY = 'back0';
+
 
 export const TARGETS = [
   { key: 'sandbag', src: withBase('assets/sandbag.png'), type: 'bag' },
@@ -18,6 +22,17 @@ export const TARGETS = [
 
   // custom：用户上传槽；src 为空将不会自动加载（由 state.customTarget.img 提供）
   { key: CUSTOM_TARGET_KEY, src: '', type: 'boss' },
+];
+
+// 背景：默认（程序渐变）+ 两张内置图 + 用户上传槽
+// - default: 不加载图片，由 render.js 画渐变
+// - back1/back2: 放在 public/assets/back1.png, back2.png
+// - back0: 用户上传（src 为空，由 state.customBackground.img 提供）
+export const BACKGROUNDS = [
+  { key: DEFAULT_BG_KEY, src: '' },
+  { key: 'back1', src: withBase('assets/back1.png') },
+  { key: 'back2', src: withBase('assets/back2.png') },
+  { key: CUSTOM_BG_KEY, src: '' },
 ];
 
 export const MODES = [
