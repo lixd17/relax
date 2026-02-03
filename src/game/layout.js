@@ -48,6 +48,7 @@ export function computeLayout(canvas, targetImg, state) {
 
   return {
     W, H, minDim,
+    targetImg,
     objW, objH,
     cx, cy,
     pivotX, pivotY,

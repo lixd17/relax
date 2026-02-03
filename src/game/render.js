@@ -1,7 +1,6 @@
 import {
   FIST_SIZE_FACTOR, CHARGE_MAX_SEC,
   VEHICLE_SIZE_SCALE,
-  CUSTOM_TARGET_KEY,
 } from '../core/config.js';
 
 import { clamp, lerp, easeOutCubic, easeInCubic, deg2rad } from '../core/utils.js';
@@ -13,7 +12,8 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
   drawBackground(ctx, L);
 
   const mode = state.modeKey ?? 'punch';
-  const targetImg = pickTargetImage(state, imgs);
+  // 目标贴图由主循环统一选择（用于 layout + render 保持一致）
+  const targetImg = L?.targetImg || imgs.targets?.values?.().next?.().value || imgs.fist;
 
 
   if (mode === 'hit') {
@@ -39,16 +39,6 @@ export function renderFrame(ctx, canvas, L, state, imgs, getDpr, nowMs) {
   drawImpactFx(ctx, L, state, "particles");
 
   drawHint(ctx, L, state);
-}
-
-function pickTargetImage(state, imgs) {
-  // 老板键：强制显示沙袋（即使 custom 上传了图）
-  if (state.bossKey?.active) {
-    return imgs.targets.get('sandbag') || imgs.targets.values().next().value || imgs.fist;
-  }
-
-  if (state.targetKey === CUSTOM_TARGET_KEY && state.customTarget?.img) return state.customTarget.img;
-  return imgs.targets.get(state.targetKey) || imgs.targets.values().next().value || imgs.fist;
 }
 
 // ------------------------
@@ -267,8 +257,6 @@ function drawTarget(ctx, L, state, targetImg) {
   const y = cy2 - objH / 2;
 
   if (targetImg) ctx.drawImage(targetImg, x, y, objW, objH);
-
-  drawImpactFx(ctx, L, state, "decal", cx2, cy2, objW, objH, special);
 
   if (state.flash > 0.02) {
     ctx.save();
@@ -580,15 +568,11 @@ function drawHint(ctx, L, state) {
 // ---------------------------
 // impact FX render (shared)
 // 3) contact shadow compression
-// 4) dent decal (on target)
 // 6) particles
 // ---------------------------
 function drawImpactFx(ctx, L, state, phase, cx2, cy2, objW, objH, special) {
   if (phase === "shadow") {
     return drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special);
-  }
-  if (phase === "decal") {
-    return drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH);
   }
   if (phase === "particles") {
     return drawImpactParticles(ctx, L, state);
@@ -604,8 +588,9 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   const side = fx.shadowSide ?? -1;
 
   // baseline shadow under target
-  const x = cx2 + side * objW * 0.05 * p;
-  const y = cy2 + objH * 0.53;
+  // 命中时的阴影“挪动”更明显：水平偏移加大 + 轻微下沉
+  const x = cx2 + side * objW * 0.12 * p;
+  const y = cy2 + objH * (0.53 + 0.02 * p);
 
   const baseW = objW * 0.34;
   const baseH = objH * 0.085;
@@ -625,57 +610,6 @@ function drawImpactShadow(ctx, L, state, cx2, cy2, objW, objH, special) {
   ctx.beginPath();
   ctx.ellipse(x, y, w * 0.5, h * 0.5, 0, 0, TAU);
   ctx.fill();
-  ctx.restore();
-}
-
-function drawImpactDecals(ctx, L, state, cx2, cy2, objW, objH) {
-  const fx = state.fxImpact;
-  if (!fx || !Array.isArray(fx.decals) || fx.decals.length === 0) return;
-
-  const minR = Math.min(objW, objH);
-
-  ctx.save();
-  // keep decals on the target body
-  ctx.beginPath();
-  ctx.rect(cx2 - objW / 2, cy2 - objH / 2, objW, objH);
-  ctx.clip();
-
-  for (const d of fx.decals) {
-    const t = clamp((d.age ?? 0) / Math.max(1e-6, (d.life ?? 1)), 0, 1);
-    const fade = 1 - t;
-    const a = 0.22 * fade;
-    if (a <= 0.002) continue;
-
-    const r = clamp(d.r01 ?? 0.08, 0.03, 0.20) * minR;
-    const x = cx2 + clamp(d.u ?? 0, -0.48, 0.48) * objW;
-    const y = cy2 + clamp(d.v ?? 0, -0.48, 0.48) * objH;
-
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(d.rot ?? 0);
-
-    // slight ellipse makes it look like a dent instead of a perfect sticker
-    ctx.scale(1.25, 0.88);
-
-    // dark center fade
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    g.addColorStop(0, `rgba(0,0,0,${0.35 * a})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
-    ctx.fill();
-
-    // subtle rim highlight
-    ctx.strokeStyle = `rgba(255,255,255,${0.18 * a})`;
-    ctx.lineWidth = Math.max(1, r * 0.18);
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.72, 0, TAU);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
   ctx.restore();
 }
 

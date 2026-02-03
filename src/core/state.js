@@ -105,14 +105,11 @@ export function createState() {
       h: 0,
     },
 
-    // impact FX: contact shadow + dent decal + particles
+    // impact FX: contact shadow + particles
     fxImpact: {
       // 0..1 pulse strength, decays quickly
       shadow: 0,
       shadowSide: -1,
-
-      // decals are stored in target-local normalized coords (u,v)
-      decals: [], // {u,v,r01,rot,age,life,side}
 
       // particles are world-space
       parts: [],  // {x,y,vx,vy,r,age,life,a,g}

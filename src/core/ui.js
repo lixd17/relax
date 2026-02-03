@@ -525,12 +525,20 @@ export function createUI(state, onTargetChange) {
   // Target options（包含 custom）
   targetSel.innerHTML = '';
   for (const t of TARGETS) {
+    // 老板键目标仅供 Space 临时切换：不在下拉菜单里暴露，避免误选/困惑
+    if (t.key === BOSSKEY_TARGET_KEY) continue;
     const opt = document.createElement('option');
     opt.value = t.key;
     opt.textContent = stripExt(t.key);
     targetSel.appendChild(opt);
   }
-  targetSel.value = state.targetKey;
+  // 若当前处于老板键状态（state.targetKey=stealth），下拉保持显示“上一次的真实目标”
+  if (state.targetKey === BOSSKEY_TARGET_KEY) {
+    const fallback = TARGETS.find(t => t.key !== BOSSKEY_TARGET_KEY)?.key || TARGETS[0].key;
+    targetSel.value = state.bossKey?.prevTargetKey || fallback;
+  } else {
+    targetSel.value = state.targetKey;
+  }
 
   function rebuildToolMenu() {
     toolSel.innerHTML = '';

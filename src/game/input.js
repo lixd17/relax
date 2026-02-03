@@ -183,6 +183,9 @@ export function attachInput(canvas, getDpr, state, audio) {
 
   // keyboard
   window.addEventListener('keydown', (e) => {
+    // 避免在输入框里打字时误触（尤其是 Space 会触发老板键，导致“无法命名/无法输入空格”）
+    if (isTypingTarget(e)) return;
+
     // 空格：老板键（任何模式都可用）
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
@@ -192,9 +195,6 @@ export function attachInput(canvas, getDpr, state, audio) {
 
     // rage：任意字母触发攻击
     if ((state.modeKey ?? 'punch') !== 'rage') return;
-
-    // 避免在输入框打字时触发攻击
-    if (isTypingTarget(e)) return;
 
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (!isLetterKey(e.key)) return;
